@@ -14,7 +14,7 @@ abort() {
 echo -e "${GREEN}Starting kernel build configuration.${RESET}"
 
 # --- Question 1: OS_PATCH_LEVEL and OS_VERSION configuration ---
-DEFAULT_OS_PATCH_LEVEL=2025-07
+DEFAULT_OS_PATCH_LEVEL=2025-08
 DEFAULT_OS_VERSION=13.0.0
 
 read -p "Use default values for OS_PATCH_LEVEL (${DEFAULT_OS_PATCH_LEVEL}) and OS_VERSION (${DEFAULT_OS_VERSION})? (y/N): " use_default_os_params
@@ -23,7 +23,7 @@ if [[ "$use_default_os_params" =~ ^[Yy]$ ]]; then
     OS_VERSION="$DEFAULT_OS_VERSION"
     echo -e "${GREEN}Using default OS_PATCH_LEVEL=${OS_PATCH_LEVEL} and OS_VERSION=${OS_VERSION}.${RESET}"
 else
-    read -p "Enter new value for OS_PATCH_LEVEL (e.g., 2025-07 ): " new_patch_level
+    read -p "Enter new value for OS_PATCH_LEVEL (e.g., 2025-08 ): " new_patch_level
     if [ -n "$new_patch_level" ]; then
         OS_PATCH_LEVEL="$new_patch_level"
     else
