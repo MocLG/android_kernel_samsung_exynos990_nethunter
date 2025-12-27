@@ -1,0 +1,653 @@
+  HOSTCC  scripts/basic/fixdep
+  GEN     ./Makefile
+  HOSTCC  scripts/kconfig/conf.o
+  HOSTCC  scripts/kconfig/zconf.tab.o
+  HOSTLD  scripts/kconfig/conf
+scripts/kconfig/conf  --syncconfig Kconfig
+*
+* Restart config...
+*
+*
+* Security options
+*
+Enable access key retention support (KEYS) [Y/?] y
+  Enable register of persistent per-UID keyrings (PERSISTENT_KEYRINGS) [N/y/?] n
+  Large payload keys (BIG_KEYS) [N/y/?] n
+  ENCRYPTED KEYS (ENCRYPTED_KEYS) [N/m/y/?] n
+  Diffie-Hellman operations on retained keys (KEY_DH_OPERATIONS) [N/y/?] n
+Restrict unprivileged access to the kernel syslog (SECURITY_DMESG_RESTRICT) [N/y/?] n
+Enable different security models (SECURITY) [Y/n/?] y
+Enable the securityfs filesystem (SECURITYFS) [N/y/?] n
+Socket and Networking Security Hooks (SECURITY_NETWORK) [Y/n/?] y
+XFRM (IPSec) Networking Security Hooks (SECURITY_NETWORK_XFRM) [N/y/?] n
+Security hooks for pathname based access control (SECURITY_PATH) [N/y/?] n
+Low address space for LSM to protect from user allocation (LSM_MMAP_MIN_ADDR) [4096] 4096
+Harden memory copies between kernel and userspace (HARDENED_USERCOPY) [Y/n/?] y
+  Allow usercopy whitelist violations to fallback to object size (HARDENED_USERCOPY_FALLBACK) [Y/n/?] y
+  Refuse to copy allocations that span multiple pages (HARDENED_USERCOPY_PAGESPAN) [N/y/?] n
+Harden common str/mem functions against buffer overflows (FORTIFY_SOURCE) [N/y/?] (NEW) 
+Force all usermode helper calls through a single binary (STATIC_USERMODEHELPER) [N/y/?] n
+NSA SELinux Support (SECURITY_SELINUX) [Y/n/?] y
+  NSA SELinux boot parameter (SECURITY_SELINUX_BOOTPARAM) [Y/n/?] y
+    NSA SELinux boot parameter default value (SECURITY_SELINUX_BOOTPARAM_VALUE) [0] 0
+  NSA SELinux runtime disable (SECURITY_SELINUX_DISABLE) [Y/n/?] y
+  NSA SELinux Development Support (SECURITY_SELINUX_DEVELOP) [Y/n/?] y
+    NSA SELinux Always Enforcing (SECURITY_SELINUX_ALWAYS_ENFORCE) [N/y/?] n
+    NSA SELinux Always Permissive (SECURITY_SELINUX_ALWAYS_PERMISSIVE) [N/y/?] n
+  NSA SELinux AVC Statistics (SECURITY_SELINUX_AVC_STATS) [Y/n/?] y
+  NSA SELinux checkreqprot default value (SECURITY_SELINUX_CHECKREQPROT_VALUE) [0] 0
+Simplified Mandatory Access Control Kernel Support (SECURITY_SMACK) [N/y/?] n
+TOMOYO Linux Support (SECURITY_TOMOYO) [N/y/?] n
+AppArmor support (SECURITY_APPARMOR) [N/y/?] n
+Pin load of kernel files (modules, fw, etc) to one filesystem (SECURITY_LOADPIN) [N/y/?] n
+Yama support (SECURITY_YAMA) [N/y/?] n
+MST LDO kernel driver (MST_LDO) [Y/n/?] y
+MST V2 (MST_V2) [Y/n/?] y
+MST uses regulator API (MST_REGULATOR) [N/y/?] n
+MST uses support gpio (MST_SUPPORT_GPIO) [N/y/?] n
+MST before TrustZone bringup (MST_NONSECURE) [N/y/?] n
+MST is used in IF PMIC (MST_IF_PMIC) [N/y/?] n
+MFC IC using model (MFC_CHARGER) [Y/n/?] y
+MST running on TEEGRIS (MST_TEEGRIS) [Y/n/?] y
+MST LPM Disable, this works only in eng binary version (MST_LPM_DISABLE) [N/y/?] n
+MST control LPM mode for performace (MST_LPM_CONTROL) [Y/n/?] y
+HDM feature enable (HDM) [Y/n/?] y
+For debug only (HDM_DEBUG) [N/y/?] n
+Integrity subsystem (INTEGRITY) [Y/n/?] y
+  Digital signature verification using multiple keyrings (INTEGRITY_SIGNATURE) [Y/n/?] y
+    Enable asymmetric keys support (INTEGRITY_ASYMMETRIC_KEYS) [Y/n/?] y
+      Require all keys on the integrity keyrings be signed (INTEGRITY_TRUSTED_KEYRING) [Y/n/?] y
+  Enables integrity auditing support  (INTEGRITY_AUDIT) [Y/n/?] y
+  Integrity Measurement Architecture(IMA) (IMA) [N/y/?] n
+  EVM support (EVM) [N/y/?] n
+Default security module
+> 1. SELinux (DEFAULT_SECURITY_SELINUX)
+  2. Unix Discretionary Access Controls (DEFAULT_SECURITY_DAC)
+choice[1-2?]: 1
+Enables SDP (SDP) [N/y/?] n
+Enables dual encryption (DDAR) [Y/n/?] y
+SDP KEY DUMP (SDP_KEY_DUMP) [N/y/?] n
+  GEN     ./Makefile
+-- KernelSU version: 11968
+-- KernelSU Manager signature size: 0x033b
+-- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+  Using .. as source for kernel
+  HOSTCC  scripts/dtc/dtc.o
+  CC      scripts/mod/empty.o
+  HOSTCC  scripts/mod/mk_elfconfig
+  CC      kernel/bounds.s
+  HOSTCC  scripts/bin2c
+  HOSTCC  scripts/selinux/genheaders/genheaders
+  HOSTCC  scripts/dtc/flattree.o
+  HOSTCC  scripts/kallsyms
+  CC      scripts/mod/devicetable-offsets.s
+  MKELF   scripts/mod/elfconfig.h
+  HOSTCC  scripts/sortextable
+  HOSTCC  scripts/selinux/mdp/mdp
+  HOSTCC  scripts/dtc/fstree.o
+  HOSTCC  scripts/mod/modpost.o
+  HOSTCC  scripts/asn1_compiler
+  CC      arch/arm64/kernel/asm-offsets.s
+  HOSTCC  scripts/mod/sumversion.o
+  HOSTCC  scripts/extract-cert
+  HOSTCC  scripts/dtc/data.o
+  HOSTCC  scripts/dtc/livetree.o
+  HOSTCC  scripts/dtc/treesource.o
+  HOSTCC  scripts/mod/file2alias.o
+  HOSTCC  scripts/dtc/srcpos.o
+  HOSTCC  scripts/dtc/checks.o
+  HOSTCC  scripts/dtc/util.o
+  HOSTCC  scripts/dtc/dtc-lexer.lex.o
+  HOSTCC  scripts/dtc/dtc-parser.tab.o
+  HOSTCC  scripts/dtc/yamltree.o
+  CALL    ../scripts/checksyscalls.sh
+  LDS     arch/arm64/kernel/vdso/vdso.lds
+  CC      arch/arm64/kernel/vdso/vgettimeofday.o
+  AS      arch/arm64/kernel/vdso/note.o
+  AS      arch/arm64/kernel/vdso/sigreturn.o
+  LD      arch/arm64/kernel/vdso/vdso.so.dbg
+egrep: warning: egrep is obsolescent; using grep -E
+  VDSOSYM include/generated/vdso-offsets.h
+  HOSTLD  scripts/mod/modpost
+  HOSTLD  scripts/dtc/dtc
+  CHK     include/generated/compile.h
+  CC      init/main.o
+  CC      arch/arm64/kernel/signal.o
+  CC      arch/arm64/kernel/vdso.o
+  CC      arch/arm64/kernel/signal32.o
+  EXTRACT_CERTS   
+  AS      certs/system_certificates.o
+  OBJCOPY arch/arm64/kernel/vdso/vdso.so
+  AS      arch/arm64/kernel/vdso/vdso.o
+  AR      certs/built-in.a
+  AR      arch/arm64/kernel/vdso/built-in.a
+  ASN.1   crypto/rsapubkey.asn1.c
+  ASN.1   crypto/rsaprivkey.asn1.c
+  CC      crypto/rsa_helper.o
+  ASN.1   crypto/asymmetric_keys/x509.asn1.c
+  ASN.1   crypto/asymmetric_keys/x509_akid.asn1.c
+  ASN.1   crypto/asymmetric_keys/pkcs7.asn1.c
+  CC      crypto/asymmetric_keys/x509.asn1.o
+  CC      crypto/asymmetric_keys/x509_akid.asn1.o
+  CC      crypto/asymmetric_keys/x509_cert_parser.o
+  CC      crypto/asymmetric_keys/pkcs7.asn1.o
+  DTC     arch/arm64/boot/dts/exynos/exynos9830.dtb
+  AR      arch/arm64/kernel/built-in.a
+  CC      crypto/asymmetric_keys/pkcs7_parser.o
+  AR      init/built-in.a
+  CC      crypto/rsapubkey.asn1.o
+  CC      crypto/rsaprivkey.asn1.o
+  CC [M]  net/ipv4/tcp_westwood.o
+  CC [M]  net/ipv4/tcp_htcp.o
+  AR      crypto/asymmetric_keys/built-in.a
+  AR      crypto/built-in.a
+-- KernelSU version: 11968
+-- KernelSU Manager signature size: 0x033b
+-- KernelSU Manager signature hash: c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+  CC [M]  drivers/media/dvb-frontends/dvb-pll.o
+  CC [M]  drivers/media/spi/cxd2880-spi.o
+  CC [M]  drivers/media/dvb-frontends/stv0299.o
+  CC [M]  drivers/media/usb/gspca/gspca.o
+  CC [M]  drivers/media/dvb-frontends/stb0899_drv.o
+  CC [M]  drivers/media/usb/gspca/autogain_functions.o
+  CC [M]  drivers/media/tuners/tuner-xc2028.o
+  CC [M]  drivers/media/tuners/tuner-simple.o
+  CC [M]  drivers/media/tuners/tuner-types.o
+  CC [M]  drivers/media/dvb-frontends/stb0899_algo.o
+  CC [M]  drivers/media/dvb-frontends/stb6100.o
+  CC [M]  drivers/media/dvb-frontends/sp8870.o
+  CC [M]  drivers/media/dvb-frontends/cx22700.o
+  CC [M]  drivers/media/tuners/mt20xx.o
+  CC [M]  drivers/media/dvb-frontends/s5h1432.o
+  CC [M]  drivers/media/tuners/tda8290.o
+  CC [M]  drivers/media/dvb-frontends/cx24110.o
+  LD [M]  drivers/media/usb/gspca/gspca_main.o
+  CC [M]  drivers/media/dvb-frontends/tda8083.o
+  CC [M]  drivers/media/dvb-frontends/l64781.o
+  CC [M]  drivers/media/tuners/tea5767.o
+  CC [M]  drivers/media/tuners/tea5761.o
+  CC [M]  drivers/media/tuners/tda9887.o
+  CC [M]  drivers/media/dvb-frontends/dib3000mb.o
+  CC [M]  drivers/media/tuners/tda827x.o
+  CC [M]  drivers/media/tuners/tda18271-maps.o
+  CC [M]  drivers/media/tuners/tda18271-common.o
+  CC [M]  drivers/media/dvb-frontends/dib3000mc.o
+  CC [M]  drivers/media/dvb-frontends/dibx000_common.o
+  CC [M]  drivers/media/dvb-frontends/dib7000m.o
+  CC [M]  drivers/media/tuners/tda18271-fe.o
+  CC [M]  drivers/media/dvb-frontends/dib7000p.o
+  CC [M]  drivers/media/tuners/xc5000.o
+  CC [M]  drivers/media/tuners/xc4000.o
+  CC [M]  drivers/media/dvb-frontends/dib8000.o
+  AR      drivers/vision/npu/soc/built-in.a
+  CC [M]  drivers/media/tuners/msi001.o
+  CC [M]  drivers/media/dvb-frontends/dib9000.o
+  CC [M]  drivers/media/dvb-frontends/mt312.o
+  CC [M]  drivers/media/dvb-frontends/ves1820.o
+  AR      drivers/vision/npu/built-in.a
+  AR      drivers/vision/built-in.a
+  CC [M]  drivers/media/tuners/mt2060.o
+  CC [M]  drivers/media/tuners/mt2063.o
+  CC [M]  drivers/media/dvb-frontends/ves1x93.o
+  CC [M]  drivers/media/tuners/mt2266.o
+  CC [M]  drivers/media/dvb-frontends/tda1004x.o
+  CC [M]  drivers/media/tuners/qt1010.o
+  CC [M]  drivers/media/dvb-frontends/sp887x.o
+  CC [M]  drivers/media/tuners/mt2131.o
+  CC [M]  drivers/media/dvb-frontends/nxt6000.o
+  CC [M]  drivers/media/tuners/mxl5005s.o
+  CC [M]  drivers/media/dvb-frontends/mt352.o
+  CC [M]  drivers/media/tuners/mxl5007t.o
+  CC [M]  drivers/media/tuners/mc44s803.o
+  CC [M]  drivers/media/dvb-frontends/zl10036.o
+  CC [M]  drivers/media/dvb-frontends/zl10039.o
+  CC [M]  drivers/media/tuners/max2165.o
+  CC [M]  drivers/media/dvb-frontends/zl10353.o
+  CC [M]  drivers/media/dvb-frontends/cx22702.o
+  CC [M]  drivers/media/tuners/tda18218.o
+  CC [M]  drivers/media/tuners/tda18212.o
+  CC [M]  drivers/media/dvb-frontends/drxd_firm.o
+  CC [M]  drivers/media/tuners/e4000.o
+  CC [M]  drivers/media/dvb-frontends/drxd_hard.o
+  CC [M]  drivers/media/dvb-frontends/tda10021.o
+  CC [M]  drivers/media/tuners/fc2580.o
+  CC [M]  drivers/media/dvb-frontends/tda10023.o
+  CC [M]  drivers/media/tuners/tua9001.o
+  CC [M]  drivers/media/dvb-frontends/stv0297.o
+  CC [M]  drivers/media/dvb-frontends/nxt200x.o
+  CC [M]  drivers/media/tuners/si2157.o
+  CC [M]  drivers/media/dvb-frontends/or51211.o
+  CC [M]  drivers/media/tuners/fc0011.o
+  CC [M]  drivers/media/dvb-frontends/or51132.o
+  CC [M]  drivers/media/tuners/fc0012.o
+  CC [M]  drivers/media/dvb-frontends/bcm3510.o
+  CC [M]  drivers/media/tuners/fc0013.o
+  CC [M]  drivers/media/tuners/it913x.o
+  CC [M]  drivers/media/dvb-frontends/s5h1420.o
+  CC [M]  drivers/media/dvb-frontends/lgdt330x.o
+  CC [M]  drivers/media/tuners/r820t.o
+  CC [M]  drivers/media/dvb-frontends/lgdt3305.o
+  CC [M]  drivers/media/tuners/mxl301rf.o
+  CC [M]  drivers/media/dvb-frontends/lgdt3306a.o
+  CC [M]  drivers/media/tuners/qm1d1c0042.o
+  CC [M]  drivers/media/dvb-frontends/lg2160.o
+  CC [M]  drivers/media/tuners/qm1d1b0004.o
+  CC [M]  drivers/media/dvb-frontends/cx24123.o
+  CC [M]  drivers/media/dvb-frontends/lnbh25.o
+  CC [M]  drivers/media/dvb-frontends/lnbp21.o
+  CC [M]  drivers/media/tuners/m88rs6000t.o
+  CC [M]  drivers/media/dvb-frontends/lnbp22.o
+  CC [M]  drivers/media/tuners/tda18250.o
+  CC [M]  drivers/media/dvb-frontends/isl6405.o
+  LD [M]  drivers/media/tuners/tda18271.o
+  CC [M]  drivers/media/dvb-frontends/isl6421.o
+  CC [M]  drivers/media/dvb-frontends/tda10086.o
+  CC [M]  drivers/media/dvb-frontends/tda826x.o
+  CC [M]  drivers/media/dvb-frontends/tda8261.o
+  CC [M]  drivers/media/dvb-frontends/dib0070.o
+  CC [M]  drivers/media/dvb-frontends/dib0090.o
+  CC [M]  drivers/media/dvb-frontends/tua6100.o
+  CC [M]  drivers/media/dvb-frontends/s5h1409.o
+  CC [M]  drivers/media/dvb-frontends/itd1000.o
+  CC [M]  drivers/media/dvb-frontends/au8522_common.o
+  CC [M]  drivers/media/dvb-frontends/au8522_dig.o
+  CC [M]  drivers/media/dvb-frontends/au8522_decoder.o
+  CC [M]  drivers/media/dvb-frontends/tda10048.o
+  CC [M]  drivers/media/dvb-frontends/cx24113.o
+  CC [M]  drivers/media/dvb-frontends/s5h1411.o
+  CC [M]  drivers/media/dvb-frontends/lgs8gl5.o
+  CC [M]  drivers/media/dvb-frontends/tda665x.o
+  CC [M]  drivers/media/dvb-frontends/lgs8gxx.o
+  CC [M]  drivers/media/dvb-frontends/atbm8830.o
+  CC [M]  drivers/media/dvb-frontends/af9013.o
+  CC [M]  drivers/media/dvb-frontends/cx24116.o
+  CC [M]  drivers/media/dvb-frontends/cx24117.o
+  CC [M]  drivers/media/dvb-frontends/cx24120.o
+  CC [M]  drivers/media/dvb-frontends/si21xx.o
+  CC [M]  drivers/media/dvb-frontends/si2168.o
+  CC [M]  drivers/media/dvb-frontends/stv0288.o
+  CC [M]  drivers/media/dvb-frontends/stb6000.o
+  CC [M]  drivers/media/dvb-frontends/s921.o
+  CC [M]  drivers/media/dvb-frontends/stv6110.o
+  CC [M]  drivers/media/dvb-frontends/stv0900_core.o
+  CC [M]  drivers/media/dvb-frontends/stv0900_sw.o
+  CC [M]  drivers/media/dvb-frontends/stv090x.o
+  CC [M]  drivers/media/dvb-frontends/stv6110x.o
+  CC [M]  drivers/media/dvb-frontends/m88ds3103.o
+  CC [M]  drivers/media/dvb-frontends/mn88472.o
+  CC [M]  drivers/media/dvb-frontends/mn88473.o
+  CC [M]  drivers/media/dvb-frontends/isl6423.o
+  CC [M]  drivers/media/dvb-frontends/ec100.o
+  CC [M]  drivers/media/dvb-frontends/ds3000.o
+  CC [M]  drivers/media/dvb-frontends/ts2020.o
+  CC [M]  drivers/media/dvb-frontends/mb86a16.o
+  CC [M]  drivers/media/dvb-frontends/mb86a20s.o
+  CC [M]  drivers/media/dvb-frontends/ix2505v.o
+  CC [M]  drivers/media/dvb-frontends/stv0367.o
+  CC [M]  drivers/media/dvb-frontends/cxd2820r_core.o
+  CC [M]  drivers/media/dvb-frontends/cxd2820r_c.o
+  CC [M]  drivers/media/dvb-frontends/cxd2820r_t.o
+  CC [M]  drivers/media/dvb-frontends/cxd2820r_t2.o
+  CC [M]  drivers/media/dvb-frontends/cxd2841er.o
+  CC [M]  drivers/media/dvb-frontends/drxk_hard.o
+  CC [M]  drivers/media/dvb-frontends/tda18271c2dd.o
+  CC [M]  drivers/media/dvb-frontends/stv0910.o
+  CC [M]  drivers/media/dvb-frontends/stv6111.o
+  CC [M]  drivers/media/dvb-frontends/mxl5xx.o
+  CC [M]  drivers/media/dvb-frontends/si2165.o
+  CC [M]  drivers/media/dvb-frontends/a8293.o
+  CC [M]  drivers/media/dvb-frontends/sp2.o
+  CC [M]  drivers/media/dvb-frontends/tda10071.o
+  CC [M]  drivers/media/dvb-frontends/m88rs2000.o
+  CC [M]  drivers/media/dvb-frontends/af9033.o
+  CC [M]  drivers/media/dvb-frontends/tc90522.o
+  CC [M]  drivers/media/dvb-frontends/mn88443x.o
+  CC [M]  drivers/media/dvb-frontends/horus3a.o
+  CC [M]  drivers/media/dvb-frontends/ascot2e.o
+  CC [M]  drivers/media/dvb-frontends/helene.o
+  CC [M]  drivers/media/dvb-frontends/zd1301_demod.o
+  CC [M]  drivers/media/dvb-frontends/cxd2099.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_common.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_devio_spi.o
+  CC [M]  drivers/media/dvb-frontends/drx39xyj/drxj.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_integ.o
+  LD [M]  drivers/media/dvb-frontends/stb0899.o
+  LD [M]  drivers/media/dvb-frontends/drxd.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_io.o
+  LD [M]  drivers/media/dvb-frontends/stv0900.o
+  LD [M]  drivers/media/dvb-frontends/cxd2820r.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_spi_device.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd_dvbt2.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd_dvbt2_mon.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd_dvbt.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd_dvbt_mon.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_tnrdmd_mon.o
+  CC [M]  drivers/media/dvb-frontends/cxd2880/cxd2880_top.o
+  LD [M]  drivers/media/dvb-frontends/drxk.o
+  LD [M]  drivers/media/dvb-frontends/cxd2880/cxd2880.o
+  LD [M]  drivers/media/dvb-frontends/drx39xyj/drx39xyj.o
+  AR      drivers/built-in.a
+  GEN     .version
+  CHK     include/generated/compile.h
+  AR      built-in.a
+  MODPOST vmlinux.o
+aarch64-linux-gnu-ld: warning: -z norelro ignored
+  KSYM    .tmp_kallsyms1.o
+aarch64-linux-gnu-ld: warning: -z norelro ignored
+  KSYM    .tmp_kallsyms2.o
+  LD      vmlinux
+aarch64-linux-gnu-ld: warning: -z norelro ignored
+  SORTEX  vmlinux
+  SYSMAP  System.map
+  FIPS : Generating hmac of fmp and updating vmlinux... 
+  OBJCOPY arch/arm64/boot/Image
+  Building modules, stage 2.
+  GZIP    arch/arm64/boot/Image.gz
+  MODPOST 153 modules
+  CC      drivers/media/dvb-frontends/a8293.mod.o
+  CC      drivers/media/dvb-frontends/af9013.mod.o
+  CC      drivers/media/dvb-frontends/af9033.mod.o
+  CC      drivers/media/dvb-frontends/ascot2e.mod.o
+  CC      drivers/media/dvb-frontends/atbm8830.mod.o
+  CC      drivers/media/dvb-frontends/au8522_common.mod.o
+  CC      drivers/media/dvb-frontends/au8522_decoder.mod.o
+  CC      drivers/media/dvb-frontends/au8522_dig.mod.o
+  CC      drivers/media/dvb-frontends/bcm3510.mod.o
+  CC      drivers/media/dvb-frontends/cx22700.mod.o
+  CC      drivers/media/dvb-frontends/cx22702.mod.o
+  CC      drivers/media/dvb-frontends/cx24110.mod.o
+  CC      drivers/media/dvb-frontends/cx24113.mod.o
+  CC      drivers/media/dvb-frontends/cx24116.mod.o
+  CC      drivers/media/dvb-frontends/cx24117.mod.o
+  CC      drivers/media/dvb-frontends/cx24120.mod.o
+  CC      drivers/media/dvb-frontends/cx24123.mod.o
+  CC      drivers/media/dvb-frontends/cxd2099.mod.o
+  CC      drivers/media/dvb-frontends/cxd2820r.mod.o
+  CC      drivers/media/dvb-frontends/cxd2841er.mod.o
+  CC      drivers/media/dvb-frontends/cxd2880/cxd2880.mod.o
+  CC      drivers/media/dvb-frontends/dib0070.mod.o
+  CC      drivers/media/dvb-frontends/dib0090.mod.o
+  CC      drivers/media/dvb-frontends/dib3000mb.mod.o
+  CC      drivers/media/dvb-frontends/dib3000mc.mod.o
+  CC      drivers/media/dvb-frontends/dib7000m.mod.o
+  CC      drivers/media/dvb-frontends/dib7000p.mod.o
+  CC      drivers/media/dvb-frontends/dib8000.mod.o
+  CC      drivers/media/dvb-frontends/dib9000.mod.o
+  CC      drivers/media/dvb-frontends/dibx000_common.mod.o
+  CC      drivers/media/dvb-frontends/drx39xyj/drx39xyj.mod.o
+  CC      drivers/media/dvb-frontends/drxd.mod.o
+  CC      drivers/media/dvb-frontends/drxk.mod.o
+  CC      drivers/media/dvb-frontends/ds3000.mod.o
+  CC      drivers/media/dvb-frontends/dvb-pll.mod.o
+  CC      drivers/media/dvb-frontends/ec100.mod.o
+  CC      drivers/media/dvb-frontends/helene.mod.o
+  CC      drivers/media/dvb-frontends/horus3a.mod.o
+  CC      drivers/media/dvb-frontends/isl6405.mod.o
+  CC      drivers/media/dvb-frontends/isl6421.mod.o
+  CC      drivers/media/dvb-frontends/isl6423.mod.o
+  CC      drivers/media/dvb-frontends/itd1000.mod.o
+  CC      drivers/media/dvb-frontends/ix2505v.mod.o
+  CC      drivers/media/dvb-frontends/l64781.mod.o
+  CC      drivers/media/dvb-frontends/lg2160.mod.o
+  CC      drivers/media/dvb-frontends/lgdt3305.mod.o
+  CC      drivers/media/dvb-frontends/lgdt3306a.mod.o
+  CC      drivers/media/dvb-frontends/lgdt330x.mod.o
+  CC      drivers/media/dvb-frontends/lgs8gl5.mod.o
+  CC      drivers/media/dvb-frontends/lgs8gxx.mod.o
+  CC      drivers/media/dvb-frontends/lnbh25.mod.o
+  CC      drivers/media/dvb-frontends/lnbp21.mod.o
+  CC      drivers/media/dvb-frontends/lnbp22.mod.o
+  CC      drivers/media/dvb-frontends/m88ds3103.mod.o
+  CC      drivers/media/dvb-frontends/m88rs2000.mod.o
+  CC      drivers/media/dvb-frontends/mb86a16.mod.o
+  CC      drivers/media/dvb-frontends/mb86a20s.mod.o
+  CC      drivers/media/dvb-frontends/mn88443x.mod.o
+  CC      drivers/media/dvb-frontends/mn88472.mod.o
+  CC      drivers/media/dvb-frontends/mn88473.mod.o
+  CC      drivers/media/dvb-frontends/mt312.mod.o
+  CC      drivers/media/dvb-frontends/mt352.mod.o
+  CC      drivers/media/dvb-frontends/mxl5xx.mod.o
+  CC      drivers/media/dvb-frontends/nxt200x.mod.o
+  CC      drivers/media/dvb-frontends/nxt6000.mod.o
+  CC      drivers/media/dvb-frontends/or51132.mod.o
+  CC      drivers/media/dvb-frontends/or51211.mod.o
+  CC      drivers/media/dvb-frontends/s5h1409.mod.o
+  CC      drivers/media/dvb-frontends/s5h1411.mod.o
+  CC      drivers/media/dvb-frontends/s5h1420.mod.o
+  CC      drivers/media/dvb-frontends/s5h1432.mod.o
+  CC      drivers/media/dvb-frontends/s921.mod.o
+  CC      drivers/media/dvb-frontends/si2165.mod.o
+  CC      drivers/media/dvb-frontends/si2168.mod.o
+  CC      drivers/media/dvb-frontends/si21xx.mod.o
+  CC      drivers/media/dvb-frontends/sp2.mod.o
+  CC      drivers/media/dvb-frontends/sp8870.mod.o
+  CC      drivers/media/dvb-frontends/sp887x.mod.o
+  CC      drivers/media/dvb-frontends/stb0899.mod.o
+  CC      drivers/media/dvb-frontends/stb6000.mod.o
+  CC      drivers/media/dvb-frontends/stb6100.mod.o
+  CC      drivers/media/dvb-frontends/stv0288.mod.o
+  CC      drivers/media/dvb-frontends/stv0297.mod.o
+  CC      drivers/media/dvb-frontends/stv0299.mod.o
+  CC      drivers/media/dvb-frontends/stv0367.mod.o
+  CC      drivers/media/dvb-frontends/stv0900.mod.o
+  CC      drivers/media/dvb-frontends/stv090x.mod.o
+  CC      drivers/media/dvb-frontends/stv0910.mod.o
+  CC      drivers/media/dvb-frontends/stv6110.mod.o
+  CC      drivers/media/dvb-frontends/stv6110x.mod.o
+  CC      drivers/media/dvb-frontends/stv6111.mod.o
+  CC      drivers/media/dvb-frontends/tc90522.mod.o
+  CC      drivers/media/dvb-frontends/tda10021.mod.o
+  CC      drivers/media/dvb-frontends/tda10023.mod.o
+  CC      drivers/media/dvb-frontends/tda10048.mod.o
+  CC      drivers/media/dvb-frontends/tda1004x.mod.o
+  CC      drivers/media/dvb-frontends/tda10071.mod.o
+  CC      drivers/media/dvb-frontends/tda10086.mod.o
+  CC      drivers/media/dvb-frontends/tda18271c2dd.mod.o
+  CC      drivers/media/dvb-frontends/tda665x.mod.o
+  CC      drivers/media/dvb-frontends/tda8083.mod.o
+  CC      drivers/media/dvb-frontends/tda8261.mod.o
+  CC      drivers/media/dvb-frontends/tda826x.mod.o
+  CC      drivers/media/dvb-frontends/ts2020.mod.o
+  CC      drivers/media/dvb-frontends/tua6100.mod.o
+  CC      drivers/media/dvb-frontends/ves1820.mod.o
+  CC      drivers/media/dvb-frontends/ves1x93.mod.o
+  CC      drivers/media/dvb-frontends/zd1301_demod.mod.o
+  CC      drivers/media/dvb-frontends/zl10036.mod.o
+  CC      drivers/media/dvb-frontends/zl10039.mod.o
+  CC      drivers/media/dvb-frontends/zl10353.mod.o
+  CC      drivers/media/spi/cxd2880-spi.mod.o
+  CC      drivers/media/tuners/e4000.mod.o
+  CC      drivers/media/tuners/fc0011.mod.o
+  CC      drivers/media/tuners/fc0012.mod.o
+  CC      drivers/media/tuners/fc0013.mod.o
+  CC      drivers/media/tuners/fc2580.mod.o
+  CC      drivers/media/tuners/it913x.mod.o
+  CC      drivers/media/tuners/m88rs6000t.mod.o
+  CC      drivers/media/tuners/max2165.mod.o
+  CC      drivers/media/tuners/mc44s803.mod.o
+  CC      drivers/media/tuners/msi001.mod.o
+  CC      drivers/media/tuners/mt2060.mod.o
+  CC      drivers/media/tuners/mt2063.mod.o
+  CC      drivers/media/tuners/mt20xx.mod.o
+  CC      drivers/media/tuners/mt2131.mod.o
+  CC      drivers/media/tuners/mt2266.mod.o
+  CC      drivers/media/tuners/mxl301rf.mod.o
+  CC      drivers/media/tuners/mxl5005s.mod.o
+  CC      drivers/media/tuners/mxl5007t.mod.o
+  CC      drivers/media/tuners/qm1d1b0004.mod.o
+  CC      drivers/media/tuners/qm1d1c0042.mod.o
+  CC      drivers/media/tuners/qt1010.mod.o
+  CC      drivers/media/tuners/r820t.mod.o
+  CC      drivers/media/tuners/si2157.mod.o
+  CC      drivers/media/tuners/tda18212.mod.o
+  CC      drivers/media/tuners/tda18218.mod.o
+  CC      drivers/media/tuners/tda18250.mod.o
+  CC      drivers/media/tuners/tda18271.mod.o
+  CC      drivers/media/tuners/tda827x.mod.o
+  CC      drivers/media/tuners/tda8290.mod.o
+  CC      drivers/media/tuners/tda9887.mod.o
+  CC      drivers/media/tuners/tea5761.mod.o
+  CC      drivers/media/tuners/tea5767.mod.o
+  CC      drivers/media/tuners/tua9001.mod.o
+  CC      drivers/media/tuners/tuner-simple.mod.o
+  CC      drivers/media/tuners/tuner-types.mod.o
+  CC      drivers/media/tuners/tuner-xc2028.mod.o
+  CC      drivers/media/tuners/xc4000.mod.o
+  CC      drivers/media/tuners/xc5000.mod.o
+  CC      drivers/media/usb/gspca/gspca_main.mod.o
+  CC      net/ipv4/tcp_htcp.mod.o
+  CC      net/ipv4/tcp_westwood.mod.o
+  LD [M]  drivers/media/dvb-frontends/a8293.ko
+  LD [M]  drivers/media/dvb-frontends/af9013.ko
+  LD [M]  drivers/media/dvb-frontends/af9033.ko
+  LD [M]  drivers/media/dvb-frontends/ascot2e.ko
+  LD [M]  drivers/media/dvb-frontends/atbm8830.ko
+  LD [M]  drivers/media/dvb-frontends/au8522_common.ko
+  LD [M]  drivers/media/dvb-frontends/au8522_decoder.ko
+  LD [M]  drivers/media/dvb-frontends/au8522_dig.ko
+  LD [M]  drivers/media/dvb-frontends/bcm3510.ko
+  LD [M]  drivers/media/dvb-frontends/cx22700.ko
+  LD [M]  drivers/media/dvb-frontends/cx22702.ko
+  LD [M]  drivers/media/dvb-frontends/cx24110.ko
+  LD [M]  drivers/media/dvb-frontends/cx24113.ko
+  LD [M]  drivers/media/dvb-frontends/cx24116.ko
+  LD [M]  drivers/media/dvb-frontends/cx24117.ko
+  LD [M]  drivers/media/dvb-frontends/cx24120.ko
+  LD [M]  drivers/media/dvb-frontends/cx24123.ko
+  LD [M]  drivers/media/dvb-frontends/cxd2099.ko
+  LD [M]  drivers/media/dvb-frontends/cxd2820r.ko
+  LD [M]  drivers/media/dvb-frontends/cxd2841er.ko
+  LD [M]  drivers/media/dvb-frontends/cxd2880/cxd2880.ko
+  LD [M]  drivers/media/dvb-frontends/dib0070.ko
+  LD [M]  drivers/media/dvb-frontends/dib0090.ko
+  LD [M]  drivers/media/dvb-frontends/dib3000mb.ko
+  LD [M]  drivers/media/dvb-frontends/dib3000mc.ko
+  LD [M]  drivers/media/dvb-frontends/dib7000m.ko
+  LD [M]  drivers/media/dvb-frontends/dib7000p.ko
+  LD [M]  drivers/media/dvb-frontends/dib8000.ko
+  LD [M]  drivers/media/dvb-frontends/dib9000.ko
+  LD [M]  drivers/media/dvb-frontends/dibx000_common.ko
+  LD [M]  drivers/media/dvb-frontends/drx39xyj/drx39xyj.ko
+  LD [M]  drivers/media/dvb-frontends/drxd.ko
+  LD [M]  drivers/media/dvb-frontends/drxk.ko
+  LD [M]  drivers/media/dvb-frontends/ds3000.ko
+  LD [M]  drivers/media/dvb-frontends/dvb-pll.ko
+  LD [M]  drivers/media/dvb-frontends/helene.ko
+  LD [M]  drivers/media/dvb-frontends/ec100.ko
+  LD [M]  drivers/media/dvb-frontends/horus3a.ko
+  LD [M]  drivers/media/dvb-frontends/isl6405.ko
+  LD [M]  drivers/media/dvb-frontends/isl6421.ko
+  LD [M]  drivers/media/dvb-frontends/isl6423.ko
+  LD [M]  drivers/media/dvb-frontends/itd1000.ko
+  LD [M]  drivers/media/dvb-frontends/ix2505v.ko
+  LD [M]  drivers/media/dvb-frontends/l64781.ko
+  LD [M]  drivers/media/dvb-frontends/lg2160.ko
+  LD [M]  drivers/media/dvb-frontends/lgdt3305.ko
+  LD [M]  drivers/media/dvb-frontends/lgdt3306a.ko
+  LD [M]  drivers/media/dvb-frontends/lgdt330x.ko
+  LD [M]  drivers/media/dvb-frontends/lgs8gl5.ko
+  LD [M]  drivers/media/dvb-frontends/lgs8gxx.ko
+  LD [M]  drivers/media/dvb-frontends/lnbh25.ko
+  LD [M]  drivers/media/dvb-frontends/lnbp21.ko
+  LD [M]  drivers/media/dvb-frontends/lnbp22.ko
+  LD [M]  drivers/media/dvb-frontends/m88rs2000.ko
+  LD [M]  drivers/media/dvb-frontends/m88ds3103.ko
+  LD [M]  drivers/media/dvb-frontends/mb86a16.ko
+  LD [M]  drivers/media/dvb-frontends/mb86a20s.ko
+  LD [M]  drivers/media/dvb-frontends/mn88443x.ko
+  LD [M]  drivers/media/dvb-frontends/mn88472.ko
+  LD [M]  drivers/media/dvb-frontends/mn88473.ko
+  LD [M]  drivers/media/dvb-frontends/mt312.ko
+  LD [M]  drivers/media/dvb-frontends/mt352.ko
+  LD [M]  drivers/media/dvb-frontends/mxl5xx.ko
+  LD [M]  drivers/media/dvb-frontends/nxt200x.ko
+  LD [M]  drivers/media/dvb-frontends/nxt6000.ko
+  LD [M]  drivers/media/dvb-frontends/or51211.ko
+  LD [M]  drivers/media/dvb-frontends/or51132.ko
+  LD [M]  drivers/media/dvb-frontends/s5h1409.ko
+  LD [M]  drivers/media/dvb-frontends/s5h1411.ko
+  LD [M]  drivers/media/dvb-frontends/s5h1420.ko
+  LD [M]  drivers/media/dvb-frontends/s5h1432.ko
+  LD [M]  drivers/media/dvb-frontends/s921.ko
+  LD [M]  drivers/media/dvb-frontends/si2165.ko
+  LD [M]  drivers/media/dvb-frontends/si2168.ko
+  LD [M]  drivers/media/dvb-frontends/si21xx.ko
+  LD [M]  drivers/media/dvb-frontends/sp2.ko
+  LD [M]  drivers/media/dvb-frontends/sp8870.ko
+  LD [M]  drivers/media/dvb-frontends/sp887x.ko
+  LD [M]  drivers/media/dvb-frontends/stb0899.ko
+  LD [M]  drivers/media/dvb-frontends/stb6000.ko
+  LD [M]  drivers/media/dvb-frontends/stb6100.ko
+  LD [M]  drivers/media/dvb-frontends/stv0288.ko
+  LD [M]  drivers/media/dvb-frontends/stv0297.ko
+  LD [M]  drivers/media/dvb-frontends/stv0299.ko
+  LD [M]  drivers/media/dvb-frontends/stv0367.ko
+  LD [M]  drivers/media/dvb-frontends/stv0900.ko
+  LD [M]  drivers/media/dvb-frontends/stv090x.ko
+  LD [M]  drivers/media/dvb-frontends/stv0910.ko
+  LD [M]  drivers/media/dvb-frontends/stv6110.ko
+  LD [M]  drivers/media/dvb-frontends/stv6110x.ko
+  LD [M]  drivers/media/dvb-frontends/stv6111.ko
+  LD [M]  drivers/media/dvb-frontends/tc90522.ko
+  LD [M]  drivers/media/dvb-frontends/tda10021.ko
+  LD [M]  drivers/media/dvb-frontends/tda10023.ko
+  LD [M]  drivers/media/dvb-frontends/tda10048.ko
+  LD [M]  drivers/media/dvb-frontends/tda1004x.ko
+  LD [M]  drivers/media/dvb-frontends/tda10071.ko
+  LD [M]  drivers/media/dvb-frontends/tda10086.ko
+  LD [M]  drivers/media/dvb-frontends/tda18271c2dd.ko
+  LD [M]  drivers/media/dvb-frontends/tda665x.ko
+  LD [M]  drivers/media/dvb-frontends/tda8083.ko
+  LD [M]  drivers/media/dvb-frontends/tda8261.ko
+  LD [M]  drivers/media/dvb-frontends/tda826x.ko
+  LD [M]  drivers/media/dvb-frontends/ts2020.ko
+  LD [M]  drivers/media/dvb-frontends/tua6100.ko
+  LD [M]  drivers/media/dvb-frontends/ves1820.ko
+  LD [M]  drivers/media/dvb-frontends/ves1x93.ko
+  LD [M]  drivers/media/dvb-frontends/zd1301_demod.ko
+  LD [M]  drivers/media/dvb-frontends/zl10036.ko
+  LD [M]  drivers/media/dvb-frontends/zl10039.ko
+  LD [M]  drivers/media/dvb-frontends/zl10353.ko
+  LD [M]  drivers/media/spi/cxd2880-spi.ko
+  LD [M]  drivers/media/tuners/e4000.ko
+  LD [M]  drivers/media/tuners/fc0011.ko
+  LD [M]  drivers/media/tuners/fc0012.ko
+  LD [M]  drivers/media/tuners/fc0013.ko
+  LD [M]  drivers/media/tuners/fc2580.ko
+  LD [M]  drivers/media/tuners/it913x.ko
+  LD [M]  drivers/media/tuners/m88rs6000t.ko
+  LD [M]  drivers/media/tuners/max2165.ko
+  LD [M]  drivers/media/tuners/mc44s803.ko
+  LD [M]  drivers/media/tuners/msi001.ko
+  LD [M]  drivers/media/tuners/mt2060.ko
+  LD [M]  drivers/media/tuners/mt2063.ko
+  LD [M]  drivers/media/tuners/mt20xx.ko
+  LD [M]  drivers/media/tuners/mt2131.ko
+  LD [M]  drivers/media/tuners/mt2266.ko
+  LD [M]  drivers/media/tuners/mxl301rf.ko
+  LD [M]  drivers/media/tuners/mxl5005s.ko
+  LD [M]  drivers/media/tuners/mxl5007t.ko
+  LD [M]  drivers/media/tuners/qm1d1b0004.ko
+  LD [M]  drivers/media/tuners/qm1d1c0042.ko
+  LD [M]  drivers/media/tuners/qt1010.ko
+  LD [M]  drivers/media/tuners/r820t.ko
+  LD [M]  drivers/media/tuners/si2157.ko
+  LD [M]  drivers/media/tuners/tda18212.ko
+  LD [M]  drivers/media/tuners/tda18218.ko
+  LD [M]  drivers/media/tuners/tda18250.ko
+  LD [M]  drivers/media/tuners/tda18271.ko
+  LD [M]  drivers/media/tuners/tda827x.ko
+  LD [M]  drivers/media/tuners/tda8290.ko
+  LD [M]  drivers/media/tuners/tda9887.ko
+  LD [M]  drivers/media/tuners/tea5761.ko
+  LD [M]  drivers/media/tuners/tea5767.ko
+  LD [M]  drivers/media/tuners/tua9001.ko
+  LD [M]  drivers/media/tuners/tuner-simple.ko
+  LD [M]  drivers/media/tuners/tuner-types.ko
+  LD [M]  drivers/media/tuners/tuner-xc2028.ko
+  LD [M]  drivers/media/tuners/xc4000.ko
+  LD [M]  drivers/media/usb/gspca/gspca_main.ko
+  LD [M]  drivers/media/tuners/xc5000.ko
+  LD [M]  net/ipv4/tcp_htcp.ko
+  LD [M]  net/ipv4/tcp_westwood.ko
