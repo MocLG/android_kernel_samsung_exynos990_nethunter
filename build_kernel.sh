@@ -59,29 +59,29 @@ rm -rf build/out || { echo -e "${RED}Failed to clean build/out. Check permission
 echo -e "${GREEN}✓ build/out directory cleaned.${RESET}"
 
 # === Step 1: Install/Update KernelSU Next ===
-echo -e "${GREEN}Step 1: Installing/Updating KernelSU Next...${RESET}"
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+#echo -e "${GREEN}Step 1: Installing/Updating KernelSU Next...${RESET}"
+#curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
 # === Step 2: Set environment variables ===
-echo -e "${GREEN}Step 2: Setting environment variables...${RESET}"
+echo -e "${GREEN}Step 1: Setting environment variables...${RESET}"
 export PLATFORM_VERSION=11
 export ANDROID_MAJOR_VERSION=r
 export SEC_BUILD_CONF_VENDOR_BUILD_OS=13
 export ARCH=arm64
 
 # === Step 3: Apply kernel configuration ===
-echo -e "${GREEN}Step 3: Applying kernel configuration...${RESET}"
+echo -e "${GREEN}Step 2: Applying kernel configuration...${RESET}"
 make hks-c2sxxx_defconfig || abort
 
 # === Step 4: Run menuconfig (if selected) ===
 if [[ "$RUN_MENUCONFIG" == "true" ]]; then
-    echo -e "${GREEN}Step 4: Launching menuconfig...${RESET}"
+    echo -e "${GREEN}Step 3: Launching menuconfig...${RESET}"
     make menuconfig || abort
 fi
 
 # === Step 5: Build kernel ===
-echo -e "${GREEN}Step 5: Building kernel...${RESET}"
-make -j4 || abort
+echo -e "${GREEN}Step 4: Building kernel...${RESET}"
+make -j$(nproc) || abort
 
 # 💾 Save final .config from build directory
 echo -e "${GREEN}Saving final .config file...${RESET}"
@@ -99,7 +99,7 @@ echo -e "${GREEN}✓ Image copied.${RESET}"
 
 
 # === Step 6: Prepare ramdisk for boot.img compilation ===
-echo -e "${GREEN}Step 6: Preparing ramdisk...${RESET}"
+echo -e "${GREEN}Step 5: Preparing ramdisk...${RESET}"
 RAMDISK_DIR="build/ramdisk"
 mkdir -p "$RAMDISK_DIR"/{dev,proc,sys,mnt,debug_ramdisk}
 
@@ -115,7 +115,7 @@ done
 
 # Create output directory if it doesn't exist
 mkdir -p "$(dirname "build/out/c2s/boot.img")"
-
+echo -e "${GREEN}Step 6: Parameters for boot.img compilation${RESET}"
 # === Step 7: Parameters for boot.img compilation ===
 DTB_PATH=build/out/c2s/dtb.img
 KERNEL_PATH=build/out/c2s/Image
@@ -135,7 +135,7 @@ BOARD=SRPTB27C009KU
 MODEL="c2s"
 
 # === Step 8: Build ramdisk, DTB/DTBO and boot.img ===
-echo -e "${GREEN}Step 8: Building ramdisk, DTB/DTBO and boot.img...${RESET}"
+echo -e "${GREEN}Step 7: Building ramdisk, DTB/DTBO and boot.img...${RESET}"
 pushd build/ramdisk > /dev/null
 find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip > ../out/c2s/ramdisk.cpio.gz || abort
 popd > /dev/null
@@ -162,7 +162,7 @@ fi
     --tags_offset "$TAGS_OFFSET" -o "$OUTPUT_FILE" || abort
 
 # === Step 9: Prepare and archive kernel for flashing ===
-echo -e "${GREEN}Step 9: Preparing and archiving kernel for flashing...${RESET}"
+echo -e "${GREEN}Step 8: Preparing and archiving kernel for flashing...${RESET}"
 
 # Cleanup and create necessary directories for ZIP archive
 mkdir -p build/out/c2s/zip/tools/scripts
