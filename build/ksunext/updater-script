@@ -1,0 +1,25 @@
+package_extract_dir("tools", "/tmp");
+set_metadata_recursive("/tmp/scripts", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0777);
+
+ifelse(is_mounted("/system_root"), unmount("/system_root"));
+ifelse(is_mounted("/vendor"), unmount("/vendor"));
+
+ui_print(" ");
+ui_print("Mounting partitions...");
+run_program("/tmp/scripts/busybox","blockdev","--setrw",map_partition("system"));
+run_program("/tmp/scripts/busybox","blockdev","--setrw",map_partition("vendor"));
+mount("ext4", "EMMC", map_partition("system"), "/system_root");
+mount("ext4", "EMMC", map_partition("vendor"), "/vendor");
+
+ui_print(" ");
+ui_print("Install kernel");
+package_extract_file("boot.img", "/dev/block/bootdevice/by-name/boot");
+package_extract_file("dtbo.img", "/dev/block/bootdevice/by-name/dtbo");
+
+delete_recursive("/tmp/scripts");
+delete_recursive("/tmp/*.*");
+ifelse(is_mounted("/system_root"), unmount("/system_root"));
+ifelse(is_mounted("/vendor"), unmount("/vendor"));
+
+ui_print(" ");
+ui_print("Installation completed");
