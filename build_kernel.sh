@@ -71,7 +71,7 @@ export ARCH=arm64
 
 # === Step 2: Apply kernel configuration ===
 echo -e "${GREEN}Step 2: Applying kernel configuration...${RESET}"
-make hks-c2sxxx_defconfig || abort
+make NetHunter-Extreme-c2sxxx_defconfig || abort
 
 # === Step 3: Run menuconfig (if selected) ===
 if [[ "$RUN_MENUCONFIG" == "true" ]]; then
