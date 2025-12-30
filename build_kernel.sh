@@ -226,4 +226,4 @@ zip -r -q "../$ZIP_NAME" . || {
 popd > /dev/null
 
 echo -e "${GREEN}Archive created: build/out/c2s/$ZIP_NAME${RESET}"
-echo -e "${GREEN}Script completed successfully!${RESET}"ET}"
+echo -e "${GREEN}Script completed successfully!${RESET}"
