@@ -524,6 +524,5 @@ config NET_FAILOVER
 	  datapath when the VF is unplugged.
 
 
-source "drivers/net/wireguard/Kconfig"
 
 endif # NETDEVICES
