@@ -6749,3 +6749,9 @@ CONFIG_BT_HCIVHCI=y
 # ========================================
 # KALI NETHUNTER EXTREME CONFIGURATION END
 # ========================================
+
+# =====================
+# WIREGUARD INTEGRATION
+# =====================
+CONFIG_WIREGUARD=y
+CONFIG_WIREGUARD_DEBUG=n

@@ -523,4 +523,7 @@ config NET_FAILOVER
 	  a VM with direct attached VF by failing over to the paravirtual
 	  datapath when the VF is unplugged.
 
+
+source "drivers/net/wireguard/Kconfig"
+
 endif # NETDEVICES
