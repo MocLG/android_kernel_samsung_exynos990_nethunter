@@ -17,7 +17,7 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 * **Network Protocols:** Full support for IEEE 802.11, Bluetooth HCI, and SDR.
 * **Wireguard:** Secure and encrypted network tunneling for privacy and penetration testing
 * **Optimized Performance:** Debloated and tuned for better efficiency under heavy loads.
-* **And much more.....)
+* **And much more.....**
 ---
 
 ## 🛠 Supported Devices
