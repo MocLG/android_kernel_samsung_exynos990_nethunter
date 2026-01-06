@@ -35,7 +35,8 @@ struct vb2_vmalloc_buf {
 static void vb2_vmalloc_put(void *buf_priv);
 
 static void *vb2_vmalloc_alloc(struct device *dev, unsigned long attrs, 
-                               unsigned long size, enum dma_data_direction ddir, gfp_t gfp_flags, int port)
+                               unsigned long size, enum dma_data_direction dma_dir, 
+                               gfp_t gfp_flags, int port)
 {
 	struct vb2_vmalloc_buf *buf;
 
@@ -71,7 +72,8 @@ static void vb2_vmalloc_put(void *buf_priv)
 }
 
 static void *vb2_vmalloc_get_userptr(struct device *dev, unsigned long vaddr, 
-                                     unsigned long size, enum dma_data_direction ddir, int port)
+                                     unsigned long size, enum dma_data_direction dma_dir, 
+                                     int port)
 {
 	struct vb2_vmalloc_buf *buf;
 	struct frame_vector *vec;
