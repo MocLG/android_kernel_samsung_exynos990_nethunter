@@ -7029,7 +7029,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 		DHD_GENERAL_LOCK(bus->dhd, flags);
         /* NetHunter Extreme: If in monitor mode, prioritize data flow over suspend */
         if (DHD_BUS_BUSY_CHECK_IN_TX(bus->dhd)) {
-            if (bus->dhd->pub.monitor) {
+            if (bus->dhd->monitor_enable) {
                  DHD_INFO(("%s: Monitor active, bypassing busy check\n", __FUNCTION__));
                  bus->dhd->busstate = DHD_BUS_DATA;
                  DHD_GENERAL_UNLOCK(bus->dhd, flags);
@@ -7044,7 +7044,7 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 		bus->last_suspend_start_time = OSL_LOCALTIME_NS();
 
 		/* NetHunter Extreme: ONLY stop the queue if we aren't in monitor mode */
-        if (!bus->dhd->pub.monitor) {
+        if (!bus->dhd->monitor_enable) {
             dhd_bus_stop_queue(bus);
         }
 
