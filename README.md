@@ -15,7 +15,8 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 * **HID Support:** Keyboard/Mouse hijacking (BadUSB/Rubber Ducky attacks). (Not working at the moment)
 * **DriveDroid Support:** Use your phone as a bootable USB drive. (Not working at the moment)
 * **Network Protocols:** Full support for IEEE 802.11, Bluetooth HCI, and SDR.
-* **Wireguard:** Secure and encrypted network tunneling for privacy and penetration testing
+* **Wireguard:** Secure and encrypted network tunneling for privacy and penetration testing.
+* **Battery bypass:** Power components directly from the outlet reducing heat and increasing battery life.
 * **Optimized Performance:** Debloated and tuned for better efficiency under heavy loads.
 * **And much more.....**
 ---
