@@ -348,7 +348,6 @@ static int dld_buf_size[DLD_BUFFER_NUM] = {
 		LOG_DUMP_PRESERVE_MAX_BUFSIZE,	/* DLD_BUF_TYPE_PRESERVE */
 		LOG_DUMP_SPECIAL_MAX_BUFSIZE,	/* DLD_BUF_TYPE_SPECIAL */
 };
-extern int BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *dev);
 static void dhd_log_dump_init(dhd_pub_t *dhd);
 static void dhd_log_dump_deinit(dhd_pub_t *dhd);
 static void dhd_log_dump(void *handle, void *event_info, u8 event);
@@ -5706,7 +5705,7 @@ static int
 dhd_monitor_start(struct sk_buff *skb, struct net_device *dev)
 {
     /* NetHunter Extreme: Redirect monitor packets to the real TX path */
-    return BCMFASTPATH(dhd_start_xmit_wrapper)(skb, dev);
+    return dhd_start_xmit(skb, dev);
 }
 
 #if defined(BT_OVER_SDIO)

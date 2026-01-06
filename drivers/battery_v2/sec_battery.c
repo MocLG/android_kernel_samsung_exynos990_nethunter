@@ -41,7 +41,7 @@ static ssize_t battery_bypass_store(struct device *dev,
         pr_info("NetHunter: Charging Bypass DISABLED\n");
     }
     
-    sec_bat_update_status(battery);
+    //sec_bat_update_status(battery);
     return count;
 }
 
