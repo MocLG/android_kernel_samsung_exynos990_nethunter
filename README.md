@@ -25,7 +25,7 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 
 This kernel is designed for the **Exynos 990 (universal9830/9832)** platform:
 * Samsung Galaxy Note 20 / Note 20 Ultra (Exynos)
-* Samsung Galaxy S20 / S20+ / S20 Ultra (Exynos)(Samsung S20 series require modifications to dtb)
+* Samsung Galaxy S20 / S20+ / S20 Ultra (Exynos)(Samsung S20 series require modifications to dtb/custom dtbo.img)
 * **Tested on Galaxy Note 20 Ultra (N985F), other devices are not officially supported.**
 ---
 
