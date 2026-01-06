@@ -11,18 +11,20 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 ## 🚀 Key Features
 
 * **Wireless Injection:** Support for external Wi-Fi adapters (TP-Link, Alfa, etc.).
-* **HID Support:** Keyboard/Mouse hijacking (BadUSB/Rubber Ducky attacks).
-* **DriveDroid Support:** Use your phone as a bootable USB drive.
+* **Bluetooth Arsenal:** Support for bluetooth arsenal/attacks with external adapter.
+* **HID Support:** Keyboard/Mouse hijacking (BadUSB/Rubber Ducky attacks). (Not working at the moment)
+* **DriveDroid Support:** Use your phone as a bootable USB drive. (Not working at the moment)
 * **Network Protocols:** Full support for IEEE 802.11, Bluetooth HCI, and SDR.
+* **Wireguard:** Secure and encrypted network tunneling for privacy and penetration testing
 * **Optimized Performance:** Debloated and tuned for better efficiency under heavy loads.
-
+* **And much more.....)
 ---
 
 ## 🛠 Supported Devices
 
 This kernel is designed for the **Exynos 990 (universal9830/9832)** platform:
 * Samsung Galaxy Note 20 / Note 20 Ultra (Exynos)
-* Samsung Galaxy S20 / S20+ / S20 Ultra (Exynos)
+* Samsung Galaxy S20 / S20+ / S20 Ultra (Exynos)(Samsung S20 series require modifications to dtb)
 * **Tested on Galaxy Note 20 Ultra (N985F), other devices are not officially supported.**
 ---
 
