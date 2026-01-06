@@ -42,8 +42,8 @@ cd android_kernel_samsung_exynos990_nethunter
 ### 2. Execution
 Run the automated build script provided in the repository:
 ```bash
-chmod +x build-kernel.sh
-./build-kernel.sh
+chmod +x build_kernel.sh
+./build_kernel.sh
 ```
 The script will handle the environment setup, configuration, and compilation. Once finished, the flashable Zip will be automatically created.
 
