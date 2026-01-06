@@ -16,6 +16,35 @@
 #include <linux/sec_ext.h>
 #include <linux/sec_debug.h>
 
+/* NetHunter Extreme: Charging Bypass Logic */
+static ssize_t battery_bypass_store(struct device *dev,
+                                    struct device_attribute *attr,
+                                    const char *buf, size_t count);
+
+static DEVICE_ATTR(battery_bypass, 0664, NULL, battery_bypass_store);
+
+static ssize_t battery_bypass_store(struct device *dev,
+                                    struct device_attribute *attr,
+                                    const char *buf, size_t count)
+{
+    unsigned int val;
+    struct sec_battery_info *battery = dev_get_drvdata(dev);
+
+    if (sscanf(buf, "%u", &val) != 1)
+        return -EINVAL;
+
+    if (val == 1) {
+        //battery->pdata->charging_mode = SEC_BAT_MODE_IDLE;
+        pr_info("NetHunter: Charging Bypass ENABLED\n");
+    } else {
+        //battery->pdata->charging_mode = SEC_BAT_MODE_CHARGING;
+        pr_info("NetHunter: Charging Bypass DISABLED\n");
+    }
+    
+    sec_bat_update_status(battery);
+    return count;
+}
+
 #if defined(CONFIG_SEC_ABC)
 #include <linux/sti/abc_common.h>
 #endif
@@ -9194,6 +9223,10 @@ static int sec_battery_probe(struct platform_device *pdev)
 			"%s: Failed to Register psy_bat(%d)\n", __func__, ret);
 		goto err_supply_unreg_ac;
 	}
+	/* NetHunter Extreme: This creates the /sys/class/power_supply/battery/battery_bypass file */
+    if (device_create_file(&battery->psy_bat->dev, &dev_attr_battery_bypass)) {
+        dev_err(battery->dev, "NetHunter: Failed to create battery_bypass sysfs\n");
+    }
 
 	battery->psy_wireless = power_supply_register(&pdev->dev, &wireless_power_supply_desc, &battery_cfg);
 	if (IS_ERR(battery->psy_wireless)) {

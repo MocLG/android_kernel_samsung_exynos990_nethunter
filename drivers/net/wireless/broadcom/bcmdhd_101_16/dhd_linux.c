@@ -3261,40 +3261,48 @@ void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
 netdev_tx_t
 BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
 {
-	struct dhd_rx_tx_work *start_xmit_work;
-	int ret;
-	dhd_info_t *dhd = DHD_DEV_INFO(net);
+    struct dhd_rx_tx_work *start_xmit_work;
+    int ret;
+    dhd_info_t *dhd = DHD_DEV_INFO(net);
 
-	if (dhd->pub.busstate == DHD_BUS_SUSPEND) {
-		DHD_RPM(("%s: wakeup the bus using workqueue.\n", __FUNCTION__));
+    /* NetHunter Extreme: Bypass connection check for injection */
+    if (!dhd->pub.up && !dhd->pub.monitor) {
+        DHD_TRACE(("%s: xmit rejected: up %d, mon %d\n", 
+                  __FUNCTION__, dhd->pub.up, dhd->pub.monitor));
+        PKTFREE(dhd->pub.osh, skb, FALSE);
+        return -ENETDOWN;
+    }
 
-		dhd_netif_stop_queue(dhd->pub.bus);
+    if (dhd->pub.busstate == DHD_BUS_SUSPEND) {
+        DHD_RPM(("%s: wakeup the bus using workqueue.\n", __FUNCTION__));
 
-		start_xmit_work = (struct dhd_rx_tx_work*)
-			kmalloc(sizeof(*start_xmit_work), GFP_ATOMIC);
+        dhd_netif_stop_queue(dhd->pub.bus);
 
-		if (!start_xmit_work) {
-			netdev_err(net,
-				   "error: failed to alloc start_xmit_work\n");
-			ret = -ENOMEM;
-			goto exit;
-		}
+        start_xmit_work = (struct dhd_rx_tx_work*)
+            kmalloc(sizeof(*start_xmit_work), GFP_ATOMIC);
 
-		INIT_WORK(&start_xmit_work->work, dhd_start_xmit_wq_adapter);
-		start_xmit_work->skb = skb;
-		start_xmit_work->net = net;
-		queue_work(dhd->tx_wq, &start_xmit_work->work);
-		ret = NET_XMIT_SUCCESS;
+        if (!start_xmit_work) {
+            netdev_err(net,
+                   "error: failed to alloc start_xmit_work\n");
+            ret = -ENOMEM;
+            goto exit;
+        }
 
-	} else if (dhd->pub.busstate == DHD_BUS_DATA) {
-		ret = dhd_start_xmit(skb, net);
-	} else {
-		/* when bus is down */
-		ret = -ENODEV;
-	}
+        INIT_WORK(&start_xmit_work->work, dhd_start_xmit_wq_adapter);
+        start_xmit_work->skb = skb;
+        start_xmit_work->net = net;
+        queue_work(dhd->tx_wq, &start_xmit_work->work);
+        ret = NET_XMIT_SUCCESS;
+
+    } else if (dhd->pub.busstate == DHD_BUS_DATA) {
+        ret = dhd_start_xmit(skb, net);
+    } else {
+        /* when bus is down */
+        ret = -ENODEV;
+    }
 
 exit:
-	return ret;
+    return ret;
 }
 void
 dhd_bus_wakeup_work(dhd_pub_t *dhdp)
@@ -5697,8 +5705,8 @@ typedef struct dhd_mon_dev_priv {
 static int
 dhd_monitor_start(struct sk_buff *skb, struct net_device *dev)
 {
-	PKTFREE(NULL, skb, FALSE);
-	return 0;
+    /* NetHunter Extreme: Redirect monitor packets to the real TX path */
+    return BCMFASTPATH(dhd_start_xmit_wrapper)(skb, dev);
 }
 
 #if defined(BT_OVER_SDIO)
@@ -5992,6 +6000,15 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 	 * So, register_netdev() shouldn't be called. It leads to deadlock.
 	 * To avoid deadlock due to rtnl_lock(), register_netdevice() should be used.
 	 */
+	/* NetHunter Extreme: Set TX Queue for High-Speed Injection */
+    dev->tx_queue_len = 1024;
+    
+    /* Force Monitor Mode capability flag */
+    #ifdef CONFIG_BCMDHD_MONITOR
+    dhd->pub.monitor = TRUE;
+    #endif
+
+    /* Existing Samsung Code: */
 	if (register_netdevice(dev)) {
 		DHD_ERROR(("%s, register_netdev failed for %s\n",
 			__FUNCTION__, dev->name));

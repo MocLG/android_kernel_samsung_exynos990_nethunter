@@ -7027,17 +7027,27 @@ dhdpcie_bus_suspend(struct dhd_bus *bus, bool state)
 		}
 
 		DHD_GENERAL_LOCK(bus->dhd, flags);
-		if (DHD_BUS_BUSY_CHECK_IN_TX(bus->dhd)) {
-			DHD_ERROR(("Tx Request is not ended\n"));
-			bus->dhd->busstate = DHD_BUS_DATA;
-			DHD_GENERAL_UNLOCK(bus->dhd, flags);
-			return -EBUSY;
-		}
+        /* NetHunter Extreme: If in monitor mode, prioritize data flow over suspend */
+        if (DHD_BUS_BUSY_CHECK_IN_TX(bus->dhd)) {
+            if (bus->dhd->pub.monitor) {
+                 DHD_INFO(("%s: Monitor active, bypassing busy check\n", __FUNCTION__));
+                 bus->dhd->busstate = DHD_BUS_DATA;
+                 DHD_GENERAL_UNLOCK(bus->dhd, flags);
+                 return 0; // Tell the system we handled it so it doesn't crash
+            }
+            DHD_ERROR(("Tx Request is not ended\n"));
+            bus->dhd->busstate = DHD_BUS_DATA;
+            DHD_GENERAL_UNLOCK(bus->dhd, flags);
+            return -EBUSY;
+        }
 
 		bus->last_suspend_start_time = OSL_LOCALTIME_NS();
 
-		/* stop all interface network queue. */
-		dhd_bus_stop_queue(bus);
+		/* NetHunter Extreme: ONLY stop the queue if we aren't in monitor mode */
+        if (!bus->dhd->pub.monitor) {
+            dhd_bus_stop_queue(bus);
+        }
+
 		DHD_GENERAL_UNLOCK(bus->dhd, flags);
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 		if (byint) {
