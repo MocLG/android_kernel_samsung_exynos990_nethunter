@@ -1112,6 +1112,15 @@ static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 			return ERR_PTR(-ENOMEM);
 		}
 	}
+	else {
+		/* If no descriptor is provided via configfs, use the keyboard default */
+		hidg->report_desc = kmemdup(boot_kb_report_desc,
+					    sizeof(boot_kb_report_desc),
+					    GFP_KERNEL);
+		hidg->report_desc_length = sizeof(boot_kb_report_desc);
+		hidg->report_length = 8;      /* 8-byte standard keyboard reports */
+		hidg->bInterfaceSubClass = 1; /* Boot Interface */
+		hidg->bInterfaceProtocol = 1; /* Keyboard */
 
 	mutex_unlock(&opts->lock);
 
