@@ -11,7 +11,10 @@
 #include "u_f.h"
 #include "u_os_desc.h"
 #include <linux/soc/samsung/exynos-soc.h>
-
+#ifdef CONFIG_USB_F_HID
+extern struct usb_function_instance *hid_alloc_inst(void);
+extern void hid_free_inst(struct usb_function_instance *fi);
+#endif
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 #include <linux/platform_device.h>
 #include <linux/kdev_t.h>
@@ -2072,6 +2075,12 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 			list_for_each_entry_safe(f, tmp, &dev->linked_func, list) {
 				if (!strcmp(f->name, name)) {
 					pr_err("usb: %s: enable device[%s]\n", __func__, name);
+					/* START OF HID FIX */
+					if (!strcmp(name, "hid")) {
+						list_move_tail(&f->list, &cfg->func_list);
+						continue;
+					}
+					/* END OF HID FIX */
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 					if (!strcmp(f->name, "acm")) {
 						printk(KERN_DEBUG "usb: acm is enabled. (bcdDevice=0x400)\n");
