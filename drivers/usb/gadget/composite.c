@@ -13,7 +13,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/utsname.h>
-
+#include <linux/usblog_proc_notify.h>
 #include <linux/usb/composite.h>
 #include <linux/usb/otg.h>
 #include <asm/unaligned.h>
@@ -22,8 +22,6 @@
 #define NOTIFY_USBSTATE      0
 #define NOTIFY_USBMODE       0
 #define NOTIFY_USBMODE_EXTRA 0
-#define store_usblog_notify(type, data1, data2) do { } while (0)
-static inline void store_usblog_notify(int type, void *data1, void *data2) { }
 #endif
 /**
  * struct usb_os_string - represents OS String to be reported by a gadget
