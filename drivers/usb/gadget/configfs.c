@@ -11,6 +11,16 @@
 #include "u_f.h"
 #include "u_os_desc.h"
 #include <linux/soc/samsung/exynos-soc.h>
+#include <linux/usb/notify.h>
+#ifndef NOTIFY_USBSTATE
+#define NOTIFY_USBSTATE      0
+#define NOTIFY_USBMODE       0
+#define NOTIFY_USBMODE_EXTRA 0
+void __attribute__((weak)) store_usblog_notify(int type, void *data1, void *data2)
+{
+    /* Entry point exists but does nothing if the driver is missing */
+}
+#endif
 #ifdef CONFIG_USB_F_HID
 extern struct usb_function_instance *hid_alloc_inst(void);
 extern void hid_free_inst(struct usb_function_instance *fi);
