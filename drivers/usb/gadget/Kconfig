@@ -604,14 +604,12 @@ config USB_CONFIGFS_F_MIDI
 	  ALSA's aconnect utility etc.
 
 config USB_CONFIGFS_F_HID
-	bool "HID function"
-	depends on USB_CONFIGFS
-	select USB_F_HID
-	help
-	  The HID function driver provides generic emulation of USB
-	  Human Interface Devices (HID).
-
-	  For more information, see Documentation/usb/gadget_hid.txt.
+    bool "HID function"
+    default y
+    select USB_F_HID
+    select USB_LIBCOMPOSITE
+    help
+      The HID function driver provides generic emulation of USB Human Interface Devices (HID).
 
 config USB_CONFIGFS_F_UVC
 	bool "USB Webcam function"
