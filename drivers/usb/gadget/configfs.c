@@ -839,6 +839,11 @@ static struct config_group *function_make(
 	instance_name++;
 
 	fi = usb_get_function_instance(func_name);
+	if (IS_ERR(fi) && !strcmp(func_name, "hid")) {
+        pr_info("ConfigFS: Manually forcing HID function registration\n");
+        // This is a last-resort attempt to find the driver if auto-registration failed
+        fi = usb_get_function_instance("hid"); 
+    }
 	if (IS_ERR(fi))
 		return ERR_CAST(fi);
 
