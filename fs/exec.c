@@ -79,7 +79,9 @@
 #ifdef CONFIG_SECURITY_DEFEX
 #include <linux/defex.h>
 #endif
-
+#ifdef CONFIG_KSU
+extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags);
+#endif
 #ifdef CONFIG_KDP_CRED
 #define rkp_is_nonroot(x) ((x->cred->type)>>1 & 1)
 #ifdef CONFIG_LOD_SEC
@@ -2003,24 +2005,13 @@ out_ret:
 	return retval;
 }
 
-#if (defined CONFIG_KSU && !defined CONFIG_KPROBES)
-extern bool ksu_execveat_hook __read_mostly;
-extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
-			void *envp, int *flags);
-extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
-				 void *argv, void *envp, int *flags);
-#endif
-
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
-#if (defined CONFIG_KSU && !defined CONFIG_KPROBES)
-	if (unlikely(ksu_execveat_hook))
-		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-	else
-		ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
+#ifdef CONFIG_KSU
+    ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
 #endif
 
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
@@ -2121,8 +2112,7 @@ extern bool ksu_execveat_hook __read_mostly;
 extern __attribute__((hot, always_inline)) int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
 			       void *__never_use_argv, void *__never_use_envp,
 			       int *__never_use_flags);
-extern int ksu_handle_execve_ksud(const char __user *filename_user,
-			const char __user *const __user *__argv);
+extern int ksu_handle_execve(struct linux_binprm *bprm);
 #endif
 
 SYSCALL_DEFINE3(execve,
@@ -2154,12 +2144,6 @@ SYSCALL_DEFINE3(execve,
 	putname(path);
 #endif
 
-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)
-	if (unlikely(ksu_execveat_hook))
-		ksu_handle_execve_ksud(filename, argv);
-	else
-		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
-#endif
 
 	return do_execve(getname(filename), argv, envp);
 }
@@ -2182,10 +2166,6 @@ COMPAT_SYSCALL_DEFINE3(execve, const char __user *, filename,
 	const compat_uptr_t __user *, argv,
 	const compat_uptr_t __user *, envp)
 {
-#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK) // 32-bit su and 32-on-64 support
-	if (!ksu_execveat_hook)
-		ksu_handle_execve_sucompat((int *)AT_FDCWD, &filename, NULL, NULL, NULL);
-#endif
 
 	return compat_do_execve(getname(filename), argv, envp);
 }
