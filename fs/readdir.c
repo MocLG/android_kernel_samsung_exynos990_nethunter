@@ -20,9 +20,15 @@
 #include <linux/syscalls.h>
 #include <linux/unistd.h>
 #include <linux/compat.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#include <linux/susfs_def.h>
+#endif
 
 #include <linux/uaccess.h>
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern int susfs_sus_ino_for_filldir64(unsigned long ino);
+#endif
 #ifdef CONFIG_KSU_SUSFS
 #include <linux/susfs.h>
 #endif
@@ -210,6 +216,11 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	return 0;
 efault:
 	buf->error = -EFAULT;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) && susfs_sus_ino_for_filldir64(ino)) {
+		return 0;
+	}
+#endif
 	return -EFAULT;
 }
 
@@ -299,6 +310,11 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 efault:
 	buf->error = -EFAULT;
 	return -EFAULT;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) && susfs_sus_ino_for_filldir64(ino)) {
+		return 0;
+	}
+#endif
 }
 
 int ksys_getdents64(unsigned int fd, struct linux_dirent64 __user *dirent,
@@ -401,6 +417,11 @@ COMPAT_SYSCALL_DEFINE3(old_readdir, unsigned int, fd,
 	};
 
 	if (!f.file)
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) && susfs_sus_ino_for_filldir64(ino)) {
+		return 0;
+	}
+#endif
 		return -EBADF;
 
 	error = iterate_dir(f.file, &buf.ctx);
@@ -439,6 +460,11 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 	buf->error = -EINVAL;	/* only used if we fail.. */
 	if (reclen > buf->count)
 		return -EINVAL;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (likely(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC) && susfs_sus_ino_for_filldir64(ino)) {
+		return 0;
+	}
+#endif
 	d_ino = ino;
 	if (sizeof(d_ino) < sizeof(ino) && d_ino != ino) {
 		buf->error = -EOVERFLOW;
