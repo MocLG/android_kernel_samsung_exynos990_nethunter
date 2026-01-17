@@ -183,4 +183,8 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
 /* susfs_init */
 void susfs_init(void);
 
+/* Manual additions for stat.c compatibility */
+extern bool susfs_sus_path_by_path(struct path *path, int *retval, int syscall_family);
+extern void susfs_sus_kstat(unsigned long ino, struct kstat *stat);
+
 #endif

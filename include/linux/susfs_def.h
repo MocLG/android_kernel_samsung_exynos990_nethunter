@@ -59,4 +59,15 @@
 #define DATA_ADB_NO_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT "/data/adb/susfs_no_auto_add_sus_ksu_default_mount"
 #define DATA_ADB_NO_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT "/data/adb/susfs_no_auto_add_try_umount_for_bind_mount"
 
+/* Syscall Families for susfs_sus_path_by_path */
+#define SYSCALL_FAMILY_STAT           (1 << 0)
+#define SYSCALL_FAMILY_LSTAT          (1 << 1)
+#define SYSCALL_FAMILY_STATFS         (1 << 2)
+#define SYSCALL_FAMILY_FSTAT          (1 << 3)
+#define SYSCALL_FAMILY_FSTATAT        (1 << 4)
+#define SYSCALL_FAMILY_USTAT          (1 << 5)
+#define SYSCALL_FAMILY_FSTATFS        (1 << 6)
+#define SYSCALL_FAMILY_ALL            (0xFFFFFFFF)
+#define SYSCALL_FAMILY_ALL_ENOENT     (0x7FFFFFFF)
+
 #endif // #ifndef KSU_SUSFS_DEF_H
