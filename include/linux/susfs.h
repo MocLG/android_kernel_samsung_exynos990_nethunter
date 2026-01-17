@@ -15,6 +15,18 @@
 #define SUSFS_VARIANT "GKI"
 #endif
 
+#ifdef CONFIG_KSU_SUSFS
+/* Global boolean flags for Auto-SUS features */
+extern bool susfs_is_auto_add_sus_bind_mount_enabled;
+extern bool susfs_is_auto_add_try_umount_for_bind_mount_enabled;
+extern bool susfs_is_auto_add_sus_ksu_default_mount_enabled;
+
+/* Unified Forward Declarations */
+extern int susfs_auto_add_sus_bind_mount(const char *pathname, struct path *path);
+extern void susfs_auto_add_try_umount_for_bind_mount(struct path *path);
+extern void susfs_auto_add_sus_ksu_default_mount(const char *pathname); // Changed from __user to standard char*
+#endif
+
 /*********/
 /* MACRO */
 /*********/
@@ -133,14 +145,17 @@ int susfs_sus_ino_for_filldir64(unsigned long ino);
 /* sus_mount */
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 int susfs_add_sus_mount(struct st_susfs_sus_mount* __user user_info);
+extern bool susfs_sus_mount(struct vfsmount *mnt, struct path *root);
+
 #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
 int susfs_auto_add_sus_bind_mount(const char *pathname, struct path *path_target);
 #endif // #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
+
 #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
-void susfs_auto_add_sus_ksu_default_mount(const char __user *to_pathname);
+/* Changed from __user *to_pathname to const char *pathname to match kernel-space strings */
+void susfs_auto_add_sus_ksu_default_mount(const char *pathname);
 #endif // #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-
 /* sus_kstat */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
 int susfs_add_sus_kstat(struct st_susfs_sus_kstat* __user user_info);
@@ -184,7 +199,8 @@ int susfs_sus_su(struct st_sus_su* __user user_info);
 void susfs_init(void);
 
 /* Manual additions for stat.c compatibility */
-extern bool susfs_sus_path_by_path(struct path *path, int *retval, int syscall_family);
-extern void susfs_sus_kstat(unsigned long ino, struct kstat *stat);
+extern bool susfs_sus_path_by_path(const struct path *path, int *retval, int syscall_family);
+extern void susfs_sus_kstat(unsigned long ino, void *stat);
+extern bool susfs_sus_path_by_filename(struct filename *filename, int *retval, int syscall_family);
 
 #endif

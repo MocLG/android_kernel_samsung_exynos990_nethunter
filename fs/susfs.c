@@ -254,52 +254,43 @@ int susfs_auto_add_sus_bind_mount(const char *pathname, struct path *path_target
 #endif // #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
 
 #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
-void susfs_auto_add_sus_ksu_default_mount(const char __user *to_pathname) {
-	char *pathname = NULL;
-	struct path path;
-	struct inode *inode;
+void susfs_auto_add_sus_ksu_default_mount(const char *pathname) {
+    struct path path;
+    struct inode *inode;
 
-	pathname = kmalloc(SUSFS_MAX_LEN_PATHNAME, GFP_KERNEL);
-	if (!pathname) {
-		SUSFS_LOGE("no enough memory\n");
-		return;
-	}
-	// Here we need to re-retrieve the struct path as we want the new struct path, not the old one
-	if (strncpy_from_user(pathname, to_pathname, SUSFS_MAX_LEN_PATHNAME-1) < 0) {
-		SUSFS_LOGE("strncpy_from_user()\n");
-		goto out_free_pathname;
-		return;
-	}
-	if ((!strncmp(pathname, "/data/adb/modules", 17) ||
-		 !strncmp(pathname, "/debug_ramdisk", 14) ||
-		 !strncmp(pathname, "/system", 7) ||
-		 !strncmp(pathname, "/system_ext", 11) ||
-		 !strncmp(pathname, "/vendor", 7) ||
-		 !strncmp(pathname, "/product", 8) ||
-		 !strncmp(pathname, "/odm", 4)) &&
-		 !kern_path(pathname, LOOKUP_FOLLOW, &path)) {
-		goto set_inode_sus_mount;
-	}
-	goto out_free_pathname;
-set_inode_sus_mount:
-	inode = path.dentry->d_inode;
-	if (!inode) {
-		goto out_path_put;
-		return;
-	}
-	if (!(inode->i_state & INODE_STATE_SUS_MOUNT)) {
-		spin_lock(&inode->i_lock);
-		inode->i_state |= INODE_STATE_SUS_MOUNT;
-		spin_unlock(&inode->i_lock);
-		SUSFS_LOGI("set SUS_MOUNT inode state for default KSU mount path '%s'\n", pathname);
-	}
-out_path_put:
-	path_put(&path);
-out_free_pathname:
-	kfree(pathname);
+    if (!pathname)
+        return;
+
+    /* * Since pathname is now a kernel string (from namespace.c), 
+     * we don't need kmalloc or strncpy_from_user.
+     */
+    if ((!strncmp(pathname, "/data/adb/modules", 17) ||
+         !strncmp(pathname, "/debug_ramdisk", 14) ||
+         !strncmp(pathname, "/system", 7) ||
+         !strncmp(pathname, "/system_ext", 11) ||
+         !strncmp(pathname, "/vendor", 7) ||
+         !strncmp(pathname, "/product", 8) ||
+         !strncmp(pathname, "/odm", 4)) &&
+         !kern_path(pathname, LOOKUP_FOLLOW, &path)) {
+        
+        inode = path.dentry->d_inode;
+        if (!inode) {
+            path_put(&path);
+            return;
+        }
+
+        if (!(inode->i_state & INODE_STATE_SUS_MOUNT)) {
+            spin_lock(&inode->i_lock);
+            inode->i_state |= INODE_STATE_SUS_MOUNT;
+            spin_unlock(&inode->i_lock);
+            SUSFS_LOGI("set SUS_MOUNT inode state for default KSU mount path '%s'\n", pathname);
+        }
+        path_put(&path);
+    }
 }
-#endif // #ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
-#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#endif
+
+#endif
 
 /* sus_kstat */
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
@@ -900,6 +891,78 @@ out:
 	return 1;
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
+
+/* --------------------------------------------------------------------------------- */
+/* MISSING DEFINITIONS FOR LINKER FIX                                               */
+/* --------------------------------------------------------------------------------- */
+
+#ifdef CONFIG_KSU_SUSFS
+/* 1. Define the Global Flags (Storage) */
+bool susfs_is_auto_add_sus_bind_mount_enabled = true;
+bool susfs_is_auto_add_try_umount_for_bind_mount_enabled = true;
+bool susfs_is_auto_add_sus_ksu_default_mount_enabled = true;
+#endif
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+/* 2. Implementation of susfs_sus_mount */
+bool susfs_sus_mount(struct vfsmount *mnt, struct path *root) {
+    struct mount *m;
+    struct inode *inode;
+
+    if (!mnt || !root)
+        return false;
+
+    m = real_mount(mnt);
+    
+    /* Check if the mount root's inode has the SUS_MOUNT flag */
+    if (m->mnt.mnt_root) {
+        inode = m->mnt.mnt_root->d_inode;
+        if (inode && (inode->i_state & INODE_STATE_SUS_MOUNT))
+            return true;
+    }
+    return false;
+}
+#endif
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+/* 3. Implementations for Path Hiding (stat.c / namei.c compatibility) */
+bool susfs_sus_path_by_path(const struct path *path, int *retval, int syscall_family) {
+    struct inode *inode;
+    
+    if (!path || !path->dentry) 
+        return false;
+        
+    inode = d_inode(path->dentry);
+    if (inode && (inode->i_state & INODE_STATE_SUS_PATH)) {
+        *retval = -ENOENT; /* Return "No such file or directory" */
+        return true;
+    }
+    return false;
+}
+
+bool susfs_sus_path_by_filename(struct filename *filename, int *retval, int syscall_family) {
+    /* * Full filename lookup is complex to implement safely here without full context.
+     * Returning false is safe; it just means we fall back to standard behavior 
+     * for filename lookups (path-based hiding above will still catch the inode).
+     */
+    return false; 
+}
+#endif
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+/* 4. Implementation for Kstat (stat.c compatibility) */
+/* Wrapper to match the signature expected by stat.c */
+void susfs_sus_kstat(unsigned long ino, void *stat) {
+    /* Cast void* back to struct kstat* */
+    struct kstat *ks = (struct kstat *)stat;
+    
+    if (!ks) return;
+    
+    /* Call the internal function you already have defined above */
+    susfs_sus_ino_for_generic_fillattr(ino, ks);
+}
+#endif
+/* --------------------------------------------------------------------------------- */
 
 /* susfs_init */
 void susfs_init(void) {
