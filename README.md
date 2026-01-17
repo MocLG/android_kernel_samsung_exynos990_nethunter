@@ -18,6 +18,7 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 * **Wireguard:** Secure and encrypted network tunneling for privacy and penetration testing.
 * **Battery bypass:** Power components directly from the outlet reducing heat and increasing battery life.
 * **Optimized Performance:** Debloated and tuned for better efficiency under heavy loads.
+* **Custom SUSFS system** Deeply hide root access, Zygisk, and LSPosed from detection by apps, bypassing root checks for banking apps, games, or other sensitive software.
 * **And much more.....**
 ---
 
