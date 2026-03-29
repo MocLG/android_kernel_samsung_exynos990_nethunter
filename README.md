@@ -80,6 +80,9 @@ Contributions are welcome! If you find a bug or want to add support for a specif
 4. Push to the Branch (`git push origin feature/AmazingFeature`).
 5. Open a Pull Request.
 
+## Credits
+This repository is a downstream fork of the Exynos990 KSU-Next project by Hargriv (H-K-Systems).
+
 ---
 
 **Developed with ❤️ for the NetHunter Community.**
