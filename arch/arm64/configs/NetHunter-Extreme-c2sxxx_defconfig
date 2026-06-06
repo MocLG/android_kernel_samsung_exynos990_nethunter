@@ -6784,3 +6784,27 @@ CONFIG_KSU_SUSFS_SUS_PATH=y
 
 CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=n
 CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=n
+
+# Docker Core Requirements
+CONFIG_CGROUP_DEVICE=y
+CONFIG_POSIX_MQUEUE=y
+
+# Docker Mandatory Networking (veth & bridge are required for container communication)
+CONFIG_VETH=y
+CONFIG_BRIDGE=y
+CONFIG_BRIDGE_NETFILTER=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+CONFIG_NETFILTER_XT_MATCH_IPVS=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+
+# Container Resource Limits
+CONFIG_CGROUP_PIDS=y
+CONFIG_BLK_CGROUP=y
+CONFIG_BLK_DEV_THROTTLING=y
+
+# Macvlan & Local Dummy Interfaces
+CONFIG_MACVLAN=y
+CONFIG_DUMMY=y
+
+# User Namespaces (Allows running rootless containers securely)
+CONFIG_USER_NS=y
