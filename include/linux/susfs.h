@@ -8,7 +8,7 @@
 #include <linux/path.h>
 #include <linux/susfs_def.h>
 
-#define SUSFS_VERSION "v1.5.5"
+#define SUSFS_VERSION "v1.5.8"
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
 #define SUSFS_VARIANT "NON-GKI"
 #else
@@ -20,6 +20,7 @@
 extern bool susfs_is_auto_add_sus_bind_mount_enabled;
 extern bool susfs_is_auto_add_try_umount_for_bind_mount_enabled;
 extern bool susfs_is_auto_add_sus_ksu_default_mount_enabled;
+extern bool susfs_hide_sus_mnts_for_all_procs;
 
 /* Unified Forward Declarations */
 extern int susfs_auto_add_sus_bind_mount(const char *pathname, struct path *path);
@@ -139,6 +140,7 @@ struct st_sus_su {
 /***********************/
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+int susfs_set_i_state_on_external_dir(char __user* user_info, int cmd);
 int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info);
 int susfs_sus_ino_for_filldir64(unsigned long ino);
 #endif

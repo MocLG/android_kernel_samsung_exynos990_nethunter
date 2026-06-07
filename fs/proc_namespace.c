@@ -25,6 +25,13 @@
 #include <linux/susfs.h>
 #endif
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+static inline bool susfs_should_hide_sus_mounts(void)
+{
+	return susfs_hide_sus_mnts_for_all_procs ||
+	       (current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC);
+}
+#endif
 
 static __poll_t mounts_poll(struct file *file, poll_table *wait)
 {
@@ -116,7 +123,8 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+	if (susfs_should_hide_sus_mounts() &&
+	    unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
 		return 0;
 #endif
 
@@ -157,7 +165,8 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
 	int err;
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+	if (susfs_should_hide_sus_mounts() &&
+	    unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
 		return 0;
 #endif
 
@@ -254,7 +263,8 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
+	if (susfs_should_hide_sus_mounts() &&
+	    unlikely(r->mnt_id >= DEFAULT_SUS_MNT_ID))
 		return 0;
 #endif
 

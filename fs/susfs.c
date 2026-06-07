@@ -35,6 +35,82 @@ bool susfs_is_log_enabled __read_mostly = true;
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 static DEFINE_HASHTABLE(SUS_PATH_HLIST, 10);
+
+struct st_susfs_external_root_path {
+	char pathname[SUSFS_MAX_LEN_PATHNAME];
+	bool is_inited;
+};
+
+static struct st_susfs_external_root_path android_data_path;
+static struct st_susfs_external_root_path sdcard_path;
+
+int susfs_set_i_state_on_external_dir(char __user* user_info, int cmd) {
+	char *pathname = NULL;
+	char *tmp_buf = NULL;
+	char *resolved_pathname;
+	struct st_susfs_external_root_path *root_path;
+	struct path path;
+	int err = 0;
+
+	pathname = kmalloc(SUSFS_MAX_LEN_PATHNAME, GFP_KERNEL);
+	if (!pathname)
+		return -ENOMEM;
+	tmp_buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tmp_buf) {
+		err = -ENOMEM;
+		goto out_kfree_pathname;
+	}
+
+	err = strncpy_from_user(pathname, user_info, SUSFS_MAX_LEN_PATHNAME - 1);
+	if (err < 0) {
+		SUSFS_LOGE("failed copying from userspace\n");
+		goto out_kfree_tmp_buf;
+	}
+	pathname[SUSFS_MAX_LEN_PATHNAME - 1] = '\0';
+
+	if (cmd == CMD_SUSFS_SET_ANDROID_DATA_ROOT_PATH) {
+		root_path = &android_data_path;
+	} else if (cmd == CMD_SUSFS_SET_SDCARD_ROOT_PATH) {
+		root_path = &sdcard_path;
+	} else {
+		err = -EINVAL;
+		goto out_kfree_tmp_buf;
+	}
+
+	err = kern_path(pathname, LOOKUP_FOLLOW, &path);
+	if (err) {
+		SUSFS_LOGE("Failed opening file '%s'\n", pathname);
+		goto out_kfree_tmp_buf;
+	}
+
+	resolved_pathname = d_path(&path, tmp_buf, PAGE_SIZE);
+	if (IS_ERR(resolved_pathname)) {
+		err = PTR_ERR(resolved_pathname);
+		goto out_path_put;
+	}
+
+	if (!d_inode(path.dentry)) {
+		err = -EINVAL;
+		goto out_path_put;
+	}
+
+	spin_lock(&susfs_spin_lock);
+	strncpy(root_path->pathname, resolved_pathname, SUSFS_MAX_LEN_PATHNAME - 1);
+	root_path->pathname[SUSFS_MAX_LEN_PATHNAME - 1] = '\0';
+	root_path->is_inited = true;
+	spin_unlock(&susfs_spin_lock);
+
+	SUSFS_LOGI("set external root path: '%s'\n", root_path->pathname);
+
+out_path_put:
+	path_put(&path);
+out_kfree_tmp_buf:
+	kfree(tmp_buf);
+out_kfree_pathname:
+	kfree(pathname);
+	return err;
+}
+
 static int susfs_update_sus_path_inode(char *target_pathname) {
 	struct path p;
 	struct inode *inode = NULL;
@@ -901,6 +977,7 @@ out:
 bool susfs_is_auto_add_sus_bind_mount_enabled = true;
 bool susfs_is_auto_add_try_umount_for_bind_mount_enabled = true;
 bool susfs_is_auto_add_sus_ksu_default_mount_enabled = true;
+bool susfs_hide_sus_mnts_for_all_procs = true;
 #endif
 
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -910,6 +987,10 @@ bool susfs_sus_mount(struct vfsmount *mnt, struct path *root) {
     struct inode *inode;
 
     if (!mnt || !root)
+        return false;
+
+    if (!susfs_hide_sus_mnts_for_all_procs &&
+        !(current->susfs_task_state & TASK_STRUCT_NON_ROOT_USER_APP_PROC))
         return false;
 
     m = real_mount(mnt);
@@ -976,4 +1057,3 @@ void susfs_init(void) {
 
 /* No module exit is needed becuase it should never be a loadable kernel module */
 //void __init susfs_exit(void)
-
