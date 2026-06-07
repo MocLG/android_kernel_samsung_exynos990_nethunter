@@ -1,5 +1,7 @@
 package_extract_dir("tools", "/tmp");
 set_metadata_recursive("/tmp/scripts", "uid", 0, "gid", 0, "dmode", 0755, "fmode", 0777);
+ui_print("Installing NetHunter USB compatibility service...");
+run_program("/tmp/scripts/busybox", "sh", "/tmp/scripts/install-nethunter-compat.sh");
 
 ifelse(is_mounted("/system_root"), unmount("/system_root"));
 ifelse(is_mounted("/vendor"), unmount("/vendor"));

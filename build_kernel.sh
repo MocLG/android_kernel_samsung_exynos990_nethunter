@@ -190,6 +190,13 @@ if [ -f "$BUSYBOX_SOURCE" ]; then
 else
     echo -e "${RED}✗ Error: Busybox file not found at: $BUSYBOX_SOURCE. Skipping copy. Ensure '$BUSYBOX_SOURCE' exists relative to the script's execution directory.${RESET}"
 fi
+
+for EXTRA_SCRIPT in build/tools/scripts/*.sh; do
+    [ -e "$EXTRA_SCRIPT" ] || continue
+    cp "$EXTRA_SCRIPT" build/out/c2s/zip/tools/scripts/ || abort
+    chmod 0755 "build/out/c2s/zip/tools/scripts/$(basename "$EXTRA_SCRIPT")" || abort
+    echo -e "${GREEN}✓ $(basename "$EXTRA_SCRIPT") copied.${RESET}"
+done
 # ==================================
 
 # Copy files to ZIP archive structure

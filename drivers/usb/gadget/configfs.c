@@ -547,6 +547,77 @@ static bool is_symboliclink_change_mode (struct config_usb_cfg *cfg)
 	return false;
 }
 
+#ifdef CONFIG_USB_F_HID
+static unsigned int android_count_linked_funcs(struct gadget_info *gi,
+					       const char *name)
+{
+	struct usb_function *f;
+	unsigned int count = 0;
+
+	list_for_each_entry(f, &gi->linked_func, list) {
+		if (!strcmp(f->name, name))
+			count++;
+	}
+
+	return count;
+}
+
+static int android_alloc_linked_func(struct gadget_info *gi, const char *func,
+				     const char *inst)
+{
+	struct usb_function_instance *fi;
+	struct usb_function *f;
+	int ret;
+
+	fi = usb_get_function_instance(func);
+	if (IS_ERR(fi))
+		return PTR_ERR(fi);
+
+	ret = config_item_set_name(&fi->group.cg_item, "%s.%s", func, inst);
+	if (ret)
+		goto err_put_inst;
+
+	if (fi->set_inst_name) {
+		ret = fi->set_inst_name(fi, inst);
+		if (ret)
+			goto err_put_inst;
+	}
+
+	f = usb_get_function(fi);
+	if (IS_ERR(f)) {
+		ret = PTR_ERR(f);
+		goto err_put_inst;
+	}
+
+	list_add_tail(&f->list, &gi->linked_func);
+	return 0;
+
+err_put_inst:
+	usb_put_function_instance(fi);
+	return ret;
+}
+
+static int android_prepare_hid_funcs(struct gadget_info *gi)
+{
+	static const char * const hid_inst[] = { "0", "1" };
+	unsigned int count;
+	int ret;
+
+	count = android_count_linked_funcs(gi, "hid");
+	while (count < ARRAY_SIZE(hid_inst)) {
+		ret = android_alloc_linked_func(gi, "hid", hid_inst[count]);
+		if (ret) {
+			pr_err("usb: failed to allocate hid.%s: %d\n",
+			       hid_inst[count], ret);
+			return ret;
+		}
+		count++;
+	}
+
+	return 0;
+}
+#endif
+
 static struct usb_function * get_adb_function_from_linked_func(struct gadget_info *gi)
 {
 	struct usb_function *f, *tmp;
@@ -839,11 +910,6 @@ static struct config_group *function_make(
 	instance_name++;
 
 	fi = usb_get_function_instance(func_name);
-	if (IS_ERR(fi) && !strcmp(func_name, "hid")) {
-        pr_info("ConfigFS: Manually forcing HID function registration\n");
-        // This is a last-resort attempt to find the driver if auto-registration failed
-        fi = usb_get_function_instance("hid"); 
-    }
 	if (IS_ERR(fi))
 		return ERR_CAST(fi);
 
@@ -2080,6 +2146,17 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 		name = strsep(&b, ",");
 		if (!name)
 			continue;
+
+#ifdef CONFIG_USB_F_HID
+		if (!strcmp(name, "hid")) {
+			int ret = android_prepare_hid_funcs(dev);
+
+			if (ret) {
+				mutex_unlock(&dev->lock);
+				return ret;
+			}
+		}
+#endif
 
 		list_for_each_entry(c, &cdev->configs, list) {
 			cfg = container_of(c, struct config_usb_cfg, c);
