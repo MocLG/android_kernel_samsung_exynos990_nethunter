@@ -58,9 +58,8 @@ The script will handle the environment setup, configuration, and compilation. On
    * Formate data.
    * Reboot to Recovery.
    * Flash the generated `.zip` file(you may need to flash samsung multidisabler after kernel zip).
-   * Flash Magisk.zip.
    * Formate data.
-3. * Download and install Magisk app
+3. * Download and install KernelSU app v0.9.5
    **NetHunter App:** Install the Kali NetHunter app to manage HID and Wireless features.
 
 ---
