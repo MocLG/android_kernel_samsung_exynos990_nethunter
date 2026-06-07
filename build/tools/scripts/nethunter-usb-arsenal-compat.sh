@@ -17,7 +17,19 @@ if sed \
 	-e 's#ln -s \$DIR_ALL_FUNCS/\$REAL_RNDIS_NAME \$DIR_CUR_FUNCS/\$SYMLINK_FUNC_NAME#ln -s $DIR_ALL_FUNCS/$REAL_RNDIS_NAME $DIR_CUR_FUNCS/$REAL_RNDIS_NAME#g' \
 	-e 's#ln -s \$DIR_ALL_FUNCS/acm\.usb0 \$DIR_CUR_FUNCS/\$SYMLINK_FUNC_NAME#ln -s $DIR_ALL_FUNCS/acm.usb0 $DIR_CUR_FUNCS/acm.usb0#g' \
 	-e 's#ln -s \$DIR_ALL_FUNCS/ecm\.usb0 \$DIR_CUR_FUNCS/\$SYMLINK_FUNC_NAME#ln -s $DIR_ALL_FUNCS/ecm.usb0 $DIR_CUR_FUNCS/ecm.usb0#g' \
+	-e 's#FUNCS_NAME_ORDER=\$((FUNCS_NAME_ORDER + 1))#:#g' \
+	-e 's#SYMLINK_FUNC_NAME="\$FUNCS_NAME_PREFIX\$FUNCS_NAME_ORDER"#:#g' \
 	"$NH_USB_ARSENAL" > "$tmp"; then
+	if ! grep -q '/sys/class/udc' "$tmp"; then
+		tmp_udc="$tmp.udc"
+		while IFS= read -r line; do
+			echo "$line"
+			if [ "$line" = 'ORI_DWC=$(getprop sys.usb.controller)' ]; then
+				echo '[ -n "$ORI_DWC" ] || ORI_DWC=$(ls /sys/class/udc 2>/dev/null | head -n1)'
+			fi
+		done < "$tmp" > "$tmp_udc" && mv "$tmp_udc" "$tmp"
+	fi
+
 	if ! cmp -s "$NH_USB_ARSENAL" "$tmp"; then
 		cp -p "$NH_USB_ARSENAL" "$NH_USB_ARSENAL.nh-usb.bak" 2>/dev/null
 		cat "$tmp" > "$NH_USB_ARSENAL"
