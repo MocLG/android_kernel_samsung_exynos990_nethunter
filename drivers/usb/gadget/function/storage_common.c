@@ -377,8 +377,21 @@ EXPORT_SYMBOL_GPL(fsg_show_inquiry_string);
 static ssize_t _fsg_store_ro(struct fsg_lun *curlun, bool ro)
 {
 	if (fsg_lun_is_open(curlun)) {
+		if (curlun->ro == ro)
+			return 0;
+		if (ro) {
+			curlun->ro = ro;
+			curlun->initially_ro = ro;
+			LDBG(curlun, "read-only status set to %d\n",
+			     curlun->ro);
+			return 0;
+		}
 		LDBG(curlun, "read-only status change prevented\n");
 		return -EBUSY;
+	}
+	if (curlun->cdrom && !ro) {
+		LDBG(curlun, "read-write status prevented for CD-ROM\n");
+		return -EINVAL;
 	}
 
 	curlun->ro = ro;
@@ -473,12 +486,18 @@ ssize_t fsg_store_cdrom(struct fsg_lun *curlun, struct rw_semaphore *filesem,
 		return ret;
 
 	down_read(filesem);
+	if (fsg_lun_is_open(curlun)) {
+		ret = (cdrom == curlun->cdrom) ? count : -EBUSY;
+		goto out;
+	}
+
 	ret = cdrom ? _fsg_store_ro(curlun, true) : 0;
 
 	if (!ret) {
 		curlun->cdrom = cdrom;
 		ret = count;
 	}
+out:
 	up_read(filesem);
 
 	return ret;

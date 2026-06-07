@@ -11,9 +11,10 @@ struct fsg_module_parameters {
 	bool		removable[FSG_MAX_LUNS];
 	bool		cdrom[FSG_MAX_LUNS];
 	bool		nofua[FSG_MAX_LUNS];
+	char		*inquiry_string[FSG_MAX_LUNS];
 
 	unsigned int	file_count, ro_count, removable_count, cdrom_count;
-	unsigned int	nofua_count;
+	unsigned int	nofua_count, inquiry_string_count;
 	unsigned int	luns;	/* nluns */
 	bool		stall;	/* can_stall */
 };
@@ -40,6 +41,8 @@ struct fsg_module_parameters {
 				"true to simulate CD-ROM instead of disk"); \
 	_FSG_MODULE_PARAM_ARRAY(prefix, params, nofua, bool,		\
 				"true to ignore SCSI WRITE(10,12) FUA bit"); \
+	_FSG_MODULE_PARAM_ARRAY(prefix, params, inquiry_string, charp,	\
+				"per-LUN 28-byte SCSI inquiry string");	\
 	_FSG_MODULE_PARAM(prefix, params, luns, uint,			\
 			  "number of LUNs");				\
 	_FSG_MODULE_PARAM(prefix, params, stall, bool,			\

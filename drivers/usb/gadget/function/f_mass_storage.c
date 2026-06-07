@@ -1080,10 +1080,10 @@ static int do_inquiry(struct fsg_common *common, struct fsg_buffhd *bh)
 	buf[7] = 0;
 	if (curlun->inquiry_string[0])
 		memcpy(buf + 8, curlun->inquiry_string,
-		       sizeof(curlun->inquiry_string));
+		       INQUIRY_STRING_LEN - 1);
 	else
 		memcpy(buf + 8, common->inquiry_string,
-		       sizeof(common->inquiry_string));
+		       INQUIRY_STRING_LEN - 1);
 	return 36;
 }
 
@@ -2509,6 +2509,22 @@ static ssize_t ro_show(struct device *dev, struct device_attribute *attr, char *
 	return fsg_show_ro(curlun, buf);
 }
 
+static ssize_t cdrom_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_show_cdrom(curlun, buf);
+}
+
+static ssize_t removable_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_show_removable(curlun, buf);
+}
+
 static ssize_t nofua_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
@@ -2526,6 +2542,14 @@ static ssize_t file_show(struct device *dev, struct device_attribute *attr,
 	return fsg_show_file(curlun, filesem, buf);
 }
 
+static ssize_t inquiry_string_show(struct device *dev,
+				   struct device_attribute *attr, char *buf)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_show_inquiry_string(curlun, buf);
+}
+
 static ssize_t ro_store(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count)
 {
@@ -2533,6 +2557,24 @@ static ssize_t ro_store(struct device *dev, struct device_attribute *attr,
 	struct rw_semaphore	*filesem = dev_get_drvdata(dev);
 
 	return fsg_store_ro(curlun, filesem, buf, count);
+}
+
+static ssize_t cdrom_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+	struct rw_semaphore	*filesem = dev_get_drvdata(dev);
+
+	return fsg_store_cdrom(curlun, filesem, buf, count);
+}
+
+static ssize_t removable_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_store_removable(curlun, buf, count);
 }
 
 static ssize_t nofua_store(struct device *dev, struct device_attribute *attr,
@@ -2552,10 +2594,23 @@ static ssize_t file_store(struct device *dev, struct device_attribute *attr,
 	return fsg_store_file(curlun, filesem, buf, count);
 }
 
+static ssize_t inquiry_string_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_store_inquiry_string(curlun, buf, count);
+}
+
 static DEVICE_ATTR_RW(nofua);
 /* mode wil be set in fsg_lun_attr_is_visible() */
 static DEVICE_ATTR(ro, 0, ro_show, ro_store);
 static DEVICE_ATTR(file, 0, file_show, file_store);
+static DEVICE_ATTR(cdrom, 0, cdrom_show, cdrom_store);
+static DEVICE_ATTR(removable, 0, removable_show, removable_store);
+static DEVICE_ATTR(inquiry_string, 0, inquiry_string_show,
+		   inquiry_string_store);
 
 /****************************** FSG COMMON ******************************/
 
@@ -2708,7 +2763,10 @@ EXPORT_SYMBOL_GPL(fsg_common_set_cdev);
 static struct attribute *fsg_lun_dev_attrs[] = {
 	&dev_attr_ro.attr,
 	&dev_attr_file.attr,
+	&dev_attr_cdrom.attr,
+	&dev_attr_removable.attr,
 	&dev_attr_nofua.attr,
+	&dev_attr_inquiry_string.attr,
 	NULL
 };
 
@@ -2718,8 +2776,11 @@ static umode_t fsg_lun_dev_is_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct fsg_lun *lun = fsg_lun_from_dev(dev);
 
-	if (attr == &dev_attr_ro.attr)
-		return lun->cdrom ? S_IRUGO : (S_IWUSR | S_IRUGO);
+	if (attr == &dev_attr_ro.attr ||
+	    attr == &dev_attr_cdrom.attr ||
+	    attr == &dev_attr_removable.attr ||
+	    attr == &dev_attr_inquiry_string.attr)
+		return S_IWUSR | S_IRUGO;
 	if (attr == &dev_attr_file.attr)
 		return lun->removable ? (S_IWUSR | S_IRUGO) : S_IRUGO;
 	return attr->mode;
@@ -2764,6 +2825,10 @@ int fsg_common_create_lun(struct fsg_common *common, struct fsg_lun_config *cfg,
 	lun->ro = cfg->cdrom || cfg->ro;
 	lun->initially_ro = lun->ro;
 	lun->removable = !!cfg->removable;
+	lun->nofua = !!cfg->nofua;
+	if (cfg->inquiry_string[0])
+		memcpy(lun->inquiry_string, cfg->inquiry_string,
+		       sizeof(lun->inquiry_string));
 
 	if (!common->sysfs) {
 		/* we DON'T own the name!*/
@@ -3456,10 +3521,16 @@ void fsg_config_from_params(struct fsg_config *cfg,
 		lun->ro = !!params->ro[i];
 		lun->cdrom = !!params->cdrom[i];
 		lun->removable = !!params->removable[i];
+		lun->nofua = !!params->nofua[i];
 		lun->filename =
 			params->file_count > i && params->file[i][0]
 			? params->file[i]
 			: NULL;
+		if (params->inquiry_string_count > i &&
+		    params->inquiry_string[i])
+			snprintf(lun->inquiry_string,
+				 sizeof(lun->inquiry_string), "%-28s",
+				 params->inquiry_string[i]);
 	}
 
 	/* Let MSF use defaults */

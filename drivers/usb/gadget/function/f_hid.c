@@ -15,6 +15,7 @@
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 #include <linux/usb/g_hid.h>
 
 #include "u_f.h"
@@ -1082,7 +1083,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 	usb_free_all_descriptors(f);
 }
 
-static char boot_kb_report_desc[] = {
+static const unsigned char nethunter_kb_report_desc[] = {
 	0x05, 0x01,	/* USAGE_PAGE (Generic Desktop)           */
 	0x09, 0x06,	/* USAGE (Keyboard)                       */
 	0xa1, 0x01,	/* COLLECTION (Application)               */
@@ -1117,6 +1118,46 @@ static char boot_kb_report_desc[] = {
 	0xc0		/* END_COLLECTION                         */
 };
 
+static const unsigned char nethunter_mouse_report_desc[] = {
+	0x05, 0x01,	/* USAGE_PAGE (Generic Desktop)           */
+	0x09, 0x02,	/* USAGE (Mouse)                          */
+	0xa1, 0x01,	/* COLLECTION (Application)               */
+	0x09, 0x01,	/*   USAGE (Pointer)                      */
+	0xa1, 0x00,	/*   COLLECTION (Physical)                */
+	0x05, 0x09,	/*     USAGE_PAGE (Button)                */
+	0x19, 0x01,	/*     USAGE_MINIMUM (Button 1)           */
+	0x29, 0x03,	/*     USAGE_MAXIMUM (Button 3)           */
+	0x15, 0x00,	/*     LOGICAL_MINIMUM (0)                */
+	0x25, 0x01,	/*     LOGICAL_MAXIMUM (1)                */
+	0x95, 0x03,	/*     REPORT_COUNT (3)                   */
+	0x75, 0x01,	/*     REPORT_SIZE (1)                    */
+	0x81, 0x02,	/*     INPUT (Data,Var,Abs)               */
+	0x95, 0x01,	/*     REPORT_COUNT (1)                   */
+	0x75, 0x05,	/*     REPORT_SIZE (5)                    */
+	0x81, 0x03,	/*     INPUT (Cnst,Var,Abs)               */
+	0x05, 0x01,	/*     USAGE_PAGE (Generic Desktop)       */
+	0x09, 0x30,	/*     USAGE (X)                          */
+	0x09, 0x31,	/*     USAGE (Y)                          */
+	0x09, 0x38,	/*     USAGE (Wheel)                      */
+	0x15, 0x81,	/*     LOGICAL_MINIMUM (-127)             */
+	0x25, 0x7f,	/*     LOGICAL_MAXIMUM (127)              */
+	0x75, 0x08,	/*     REPORT_SIZE (8)                    */
+	0x95, 0x03,	/*     REPORT_COUNT (3)                   */
+	0x81, 0x06,	/*     INPUT (Data,Var,Rel)               */
+	0xc0,		/*   END_COLLECTION                       */
+	0xc0		/* END_COLLECTION                         */
+};
+
+static bool hidg_use_mouse_default(struct f_hid_opts *opts)
+{
+	const char *name = config_item_name(&opts->func_inst.group.cg_item);
+
+	if (name && strnstr(name, "mouse", strlen(name)))
+		return true;
+
+	return opts->minor == 1;
+}
+
 static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 {
 	struct f_hidg *hidg;
@@ -1142,20 +1183,43 @@ static struct usb_function *hidg_alloc(struct usb_function_instance *fi)
 					    opts->report_desc_length,
 					    GFP_KERNEL);
 		if (!hidg->report_desc) {
+			--opts->refcnt;
 			kfree(hidg);
 			mutex_unlock(&opts->lock);
 			return ERR_PTR(-ENOMEM);
 		}
 	}
 	else {
-		/* If no descriptor is provided via configfs, use the keyboard default */
-		hidg->report_desc = kmemdup(boot_kb_report_desc,
-					    sizeof(boot_kb_report_desc),
+		const unsigned char *report_desc;
+		unsigned short report_desc_length;
+		unsigned short report_length;
+		unsigned char protocol;
+
+		if (hidg_use_mouse_default(opts)) {
+			report_desc = nethunter_mouse_report_desc;
+			report_desc_length = sizeof(nethunter_mouse_report_desc);
+			report_length = 4;
+			protocol = USB_INTERFACE_PROTOCOL_MOUSE;
+		} else {
+			report_desc = nethunter_kb_report_desc;
+			report_desc_length = sizeof(nethunter_kb_report_desc);
+			report_length = 8;
+			protocol = USB_INTERFACE_PROTOCOL_KEYBOARD;
+		}
+
+		hidg->report_desc = kmemdup(report_desc, report_desc_length,
 					    GFP_KERNEL);
-		hidg->report_desc_length = sizeof(boot_kb_report_desc);
-		hidg->report_length = 8;      /* 8-byte standard keyboard reports */
-		hidg->bInterfaceSubClass = 1; /* Boot Interface */
-		hidg->bInterfaceProtocol = 1; /* Keyboard */
+		if (!hidg->report_desc) {
+			--opts->refcnt;
+			kfree(hidg);
+			mutex_unlock(&opts->lock);
+			return ERR_PTR(-ENOMEM);
+		}
+
+		hidg->report_desc_length = report_desc_length;
+		hidg->report_length = report_length;
+		hidg->bInterfaceSubClass = USB_INTERFACE_SUBCLASS_BOOT;
+		hidg->bInterfaceProtocol = protocol;
 	}
 
 	mutex_unlock(&opts->lock);
