@@ -18135,6 +18135,22 @@ int dhd_ioctl_entry_local(struct net_device *net, wl_ioctl_t *ioc, int cmd)
 	DHD_OS_WAKE_LOCK(&dhd->pub);
 
 	ret = dhd_wl_ioctl(&dhd->pub, ifidx, ioc, ioc->buf, ioc->len);
+#ifdef WL_MONITOR
+	if (ret == BCME_OK && ioc->cmd == WLC_SET_MONITOR) {
+		int val = DHD_MONITOR_DISABLED;
+
+		if (ioc->buf && ioc->len != 0) {
+			if (ioc->len >= sizeof(int)) {
+				val = *(int *)ioc->buf;
+			} else if (ioc->len >= sizeof(short)) {
+				val = *(short *)ioc->buf;
+			} else {
+				val = *(char *)ioc->buf;
+			}
+		}
+		dhd_set_monitor(&dhd->pub, ifidx, val);
+	}
+#endif /* WL_MONITOR */
 	dhd_check_hang(net, &dhd->pub, ret);
 
 	DHD_OS_WAKE_UNLOCK(&dhd->pub);
