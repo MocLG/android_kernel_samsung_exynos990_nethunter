@@ -3261,56 +3261,131 @@ void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
 			   "error: dhd_start_xmit():%d\n", ret);
 }
 
+#ifdef WL_MONITOR
+static void
+dhd_monitor_inject_wq_adapter(struct work_struct *ptr)
+{
+	struct dhd_rx_tx_work *work;
+	dhd_info_t *dhd;
+	struct dhd_bus *bus;
+	int ret = BCME_OK;
+
+	work = container_of(ptr, struct dhd_rx_tx_work, work);
+	dhd = DHD_DEV_INFO(work->net);
+	bus = dhd->pub.bus;
+
+	if (atomic_read(&dhd->pub.block_bus) || dhd->pub.busstate == DHD_BUS_DOWN) {
+		dev_kfree_skb_any(work->skb);
+		kfree(work);
+		return;
+	}
+
+	DHD_OS_WAKE_LOCK(&dhd->pub);
+	if (bus && dhd->pub.busstate == DHD_BUS_SUSPEND) {
+		if (pm_runtime_get_sync(dhd_bus_to_dev(bus)) < 0) {
+			DHD_OS_WAKE_UNLOCK(&dhd->pub);
+			dev_kfree_skb_any(work->skb);
+			kfree(work);
+			return;
+		}
+
+		ret = dhd_monitor_inject(work->skb, work->net);
+		pm_runtime_mark_last_busy(dhd_bus_to_dev(bus));
+		pm_runtime_put_autosuspend(dhd_bus_to_dev(bus));
+	} else {
+		ret = dhd_monitor_inject(work->skb, work->net);
+	}
+	DHD_OS_WAKE_UNLOCK(&dhd->pub);
+
+	if (ret != BCME_OK) {
+		DHD_ERROR_RLMT(("%s: monitor inject failed, ret=%d\n",
+			__FUNCTION__, ret));
+	}
+	kfree(work);
+}
+
+static netdev_tx_t
+dhd_monitor_queue_inject(struct sk_buff *skb, struct net_device *net, dhd_info_t *dhd)
+{
+	struct dhd_rx_tx_work *work;
+
+	if (!dhd || !dhd->tx_wq) {
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	work = (struct dhd_rx_tx_work *)kmalloc(sizeof(*work), GFP_ATOMIC);
+	if (!work) {
+		DHD_ERROR_RLMT(("%s: failed to queue monitor inject\n", __FUNCTION__));
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	INIT_WORK(&work->work, dhd_monitor_inject_wq_adapter);
+	work->skb = skb;
+	work->net = net;
+	queue_work(dhd->tx_wq, &work->work);
+
+	return NETDEV_TX_OK;
+}
+#endif /* WL_MONITOR */
+
 netdev_tx_t
 BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
 {
-    struct dhd_rx_tx_work *start_xmit_work;
-    int ret;
-    dhd_info_t *dhd = DHD_DEV_INFO(net);
+	struct dhd_rx_tx_work *start_xmit_work;
+	int ret;
+	dhd_info_t *dhd = DHD_DEV_INFO(net);
 
-    /* NetHunter Extreme: Bypass connection check for injection */
 #ifdef WL_MONITOR
-    if (!dhd->pub.up && !dhd->pub.monitor_enable) {
-        DHD_TRACE(("%s: xmit rejected: up %d, mon %d\n",
-                  __FUNCTION__, dhd->pub.up, dhd->pub.monitor_enable));
-#else
-    if (!dhd->pub.up) {
-        DHD_TRACE(("%s: xmit rejected: up %d\n", __FUNCTION__, dhd->pub.up));
+	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
+		return dhd_monitor_queue_inject(skb, net, dhd);
+	}
 #endif /* WL_MONITOR */
-        PKTFREE(dhd->pub.osh, skb, FALSE);
-        return -ENETDOWN;
-    }
 
-    if (dhd->pub.busstate == DHD_BUS_SUSPEND) {
-        DHD_RPM(("%s: wakeup the bus using workqueue.\n", __FUNCTION__));
+	/* NetHunter Extreme: Bypass connection check for injection */
+#ifdef WL_MONITOR
+	if (!dhd->pub.up && !dhd->pub.monitor_enable) {
+		DHD_TRACE(("%s: xmit rejected: up %d, mon %d\n",
+			__FUNCTION__, dhd->pub.up, dhd->pub.monitor_enable));
+#else
+	if (!dhd->pub.up) {
+		DHD_TRACE(("%s: xmit rejected: up %d\n", __FUNCTION__, dhd->pub.up));
+#endif /* WL_MONITOR */
+		PKTFREE(dhd->pub.osh, skb, FALSE);
+		return -ENETDOWN;
+	}
 
-        dhd_netif_stop_queue(dhd->pub.bus);
+	if (dhd->pub.busstate == DHD_BUS_SUSPEND) {
+		DHD_RPM(("%s: wakeup the bus using workqueue.\n", __FUNCTION__));
 
-        start_xmit_work = (struct dhd_rx_tx_work*)
-            kmalloc(sizeof(*start_xmit_work), GFP_ATOMIC);
+		dhd_netif_stop_queue(dhd->pub.bus);
 
-        if (!start_xmit_work) {
-            netdev_err(net,
-                   "error: failed to alloc start_xmit_work\n");
-            ret = -ENOMEM;
-            goto exit;
-        }
+		start_xmit_work = (struct dhd_rx_tx_work*)
+			kmalloc(sizeof(*start_xmit_work), GFP_ATOMIC);
 
-        INIT_WORK(&start_xmit_work->work, dhd_start_xmit_wq_adapter);
-        start_xmit_work->skb = skb;
-        start_xmit_work->net = net;
-        queue_work(dhd->tx_wq, &start_xmit_work->work);
-        ret = NET_XMIT_SUCCESS;
+		if (!start_xmit_work) {
+			netdev_err(net,
+				"error: failed to alloc start_xmit_work\n");
+			ret = -ENOMEM;
+			goto exit;
+		}
 
-    } else if (dhd->pub.busstate == DHD_BUS_DATA) {
-        ret = dhd_start_xmit(skb, net);
-    } else {
-        /* when bus is down */
-        ret = -ENODEV;
-    }
+		INIT_WORK(&start_xmit_work->work, dhd_start_xmit_wq_adapter);
+		start_xmit_work->skb = skb;
+		start_xmit_work->net = net;
+		queue_work(dhd->tx_wq, &start_xmit_work->work);
+		ret = NET_XMIT_SUCCESS;
+
+	} else if (dhd->pub.busstate == DHD_BUS_DATA) {
+		ret = dhd_start_xmit(skb, net);
+	} else {
+		/* when bus is down */
+		ret = -ENODEV;
+	}
 
 exit:
-    return ret;
+	return ret;
 }
 void
 dhd_bus_wakeup_work(dhd_pub_t *dhdp)
@@ -5686,6 +5761,43 @@ dhd_monitor_channel_to_frequency(uint16 channel)
 	return 5000 + (channel * 5);
 }
 
+static int
+dhd_monitor_set_monpass(dhd_pub_t *pub, int ifidx, int val)
+{
+	uint32 monpass = (val != DHD_MONITOR_DISABLED) ? val : 0;
+	char buf[12];
+
+	memset(buf, 0, sizeof(buf));
+	memcpy(buf, "monpass", sizeof("monpass"));
+	memcpy(buf + sizeof("monpass"), &monpass, sizeof(monpass));
+
+	return dhd_wl_ioctl_cmd(pub, WLC_SET_VAR, buf, sizeof(buf), TRUE, ifidx);
+}
+
+static void
+dhd_monitor_set_fw_state(dhd_pub_t *pub, int ifidx, int val)
+{
+	uint32 enable = (val != DHD_MONITOR_DISABLED);
+	uint32 pm = enable ? PM_OFF : PM_FAST;
+	int ret;
+
+	ret = dhd_monitor_set_monpass(pub, ifidx, val);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s: monpass=%u failed, ret=%d\n",
+			__FUNCTION__, enable ? val : 0, ret));
+	}
+
+	ret = dhd_wl_ioctl_cmd(pub, WLC_SET_PROMISC, &enable, sizeof(enable), TRUE, ifidx);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s: promisc=%u failed, ret=%d\n", __FUNCTION__, enable, ret));
+	}
+
+	ret = dhd_wl_ioctl_cmd(pub, WLC_SET_PM, &pm, sizeof(pm), TRUE, ifidx);
+	if (ret != BCME_OK) {
+		DHD_ERROR(("%s: pm=%u failed, ret=%d\n", __FUNCTION__, pm, ret));
+	}
+}
+
 static struct sk_buff *
 dhd_monitor_add_radiotap(dhd_info_t *dhd, struct sk_buff *skb)
 {
@@ -6332,12 +6444,12 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 		return;
 	}
 
-	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 #ifdef DHD_PCIE_RUNTIMEPM
-		/* Disable RuntimePM in monitor mode */
-		DHD_STOP_RPM_TIMER(&dhd->pub);
-		DHD_ERROR(("%s : disable runtime PM in monitor mode\n", __FUNCTION__));
+	/* Disable RuntimePM in monitor mode */
+	DHD_STOP_RPM_TIMER(&dhd->pub);
+	DHD_ERROR(("%s : disable runtime PM in monitor mode\n", __FUNCTION__));
 #endif /* DHD_PCIE_RUNTIME_PM */
+	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 		scan_suppress = TRUE;
 		/* Set the SCAN SUPPRESS Flag in the firmware to disable scan in Monitor mode */
 		ret = dhd_iovar(&dhd->pub, 0, "scansuppress", (char *)&scan_suppress,
@@ -6366,12 +6478,12 @@ dhd_del_monitor_if(dhd_info_t *dhd)
 		return;
 	}
 
-	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 #ifdef DHD_PCIE_RUNTIMEPM
-		/* Enable RuntimePM */
-		DHD_START_RPM_TIMER(&dhd->pub);
-		DHD_ERROR(("%s : enabled runtime PM\n", __FUNCTION__));
+	/* Enable RuntimePM */
+	DHD_START_RPM_TIMER(&dhd->pub);
+	DHD_ERROR(("%s : enabled runtime PM\n", __FUNCTION__));
 #endif /* DHD_PCIE_RUNTIME_PM */
+	if (FW_SUPPORTED((&dhd->pub), monitor)) {
 		scan_suppress = FALSE;
 		/* Unset the SCAN SUPPRESS Flag in the firmware to enable scan */
 		ret = dhd_iovar(&dhd->pub, 0, "scansuppress", (char *)&scan_suppress,
@@ -6405,6 +6517,7 @@ dhd_set_monitor(dhd_pub_t *pub, int ifidx, int val)
 
 	dhd_net_if_lock_local(dhd);
 	if (!enable) {
+		dhd_monitor_set_fw_state(pub, ifidx, val);
 		dhd_del_monitor_if(dhd);
 		dhd->monitor_type = DHD_MONITOR_DISABLED;
 		dhd->monitor_channel = 0;
@@ -6412,6 +6525,7 @@ dhd_set_monitor(dhd_pub_t *pub, int ifidx, int val)
 		dhd_monitor_set_primary_type(dhd, ifidx, FALSE);
 		pub->monitor_enable = FALSE;
 	} else {
+		dhd_monitor_set_fw_state(pub, ifidx, val);
 		dhd->monitor_type = val;
 		dhd_monitor_set_primary_type(dhd, ifidx, TRUE);
 		dhd_add_monitor_if(dhd);

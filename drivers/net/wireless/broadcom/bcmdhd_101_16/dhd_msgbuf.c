@@ -5865,13 +5865,8 @@ BCMFASTPATH(dhd_prot_process_msgbuf_rxcpl)(dhd_pub_t *dhd, uint bound, int ringt
 
 #if defined(WL_MONITOR)
 			if (dhd_monitor_enabled(dhd, ifidx)) {
-				if (msg->flags & BCMPCIE_PKT_FLAGS_FRAME_802_11) {
-					dhd_rx_mon_pkt(dhd, msg, pkt, ifidx);
-					continue;
-				} else {
-					DHD_ERROR(("Received non 802.11 packet, "
-						"when monitor mode is enabled\n"));
-				}
+				dhd_rx_mon_pkt(dhd, msg, pkt, ifidx);
+				continue;
 			}
 #endif /* WL_MONITOR */
 

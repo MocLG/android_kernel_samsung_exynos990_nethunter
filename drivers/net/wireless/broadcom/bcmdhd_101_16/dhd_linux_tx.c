@@ -43,6 +43,7 @@
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/if_arp.h>
+#include <net/ieee80211_radiotap.h>
 #include <linux/rtnetlink.h>
 #include <linux/etherdevice.h>
 #include <linux/random.h>
@@ -502,6 +503,23 @@ typedef struct dhd_nexmon_inject_frame {
 	uint8 data[0];
 } __attribute__((packed)) dhd_nexmon_inject_frame_t;
 
+static bool
+dhd_monitor_inject_has_radiotap(struct sk_buff *skb)
+{
+	struct ieee80211_radiotap_header *rtap;
+	uint16 len;
+
+	if (!skb || skb->len < sizeof(*rtap)) {
+		return FALSE;
+	}
+
+	rtap = (struct ieee80211_radiotap_header *)skb->data;
+	len = le16_to_cpu(rtap->it_len);
+
+	return (rtap->it_version == 0 &&
+		len >= sizeof(*rtap) && len <= skb->len && len <= MAX_RADIOTAP_SIZE);
+}
+
 int
 dhd_monitor_inject(struct sk_buff *skb, struct net_device *dev)
 {
@@ -542,7 +560,7 @@ dhd_monitor_inject(struct sk_buff *skb, struct net_device *dev)
 
 	frame->len = (uint16)inject_len;
 	frame->pad = 0;
-	frame->type = 1;
+	frame->type = dhd_monitor_inject_has_radiotap(skb) ? 1 : 0;
 	memcpy(frame->data, skb->data, skb->len);
 	dev_kfree_skb_any(skb);
 
@@ -572,6 +590,17 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 #endif /* DHD_MQ && DHD_MQ_STATS */
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
+
+#ifdef WL_MONITOR
+	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
+		ret = dhd_monitor_inject(skb, net);
+		if (ret != BCME_OK) {
+			DHD_ERROR_RLMT(("%s: monitor inject failed, ret=%d\n",
+				__FUNCTION__, ret));
+		}
+		return NETDEV_TX_OK;
+	}
+#endif /* WL_MONITOR */
 
 #if defined(DHD_MQ) && defined(DHD_MQ_STATS)
 	qidx = skb_get_queue_mapping(skb);
@@ -685,14 +714,6 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 
 	ASSERT(ifidx == dhd_net2idx(dhd, net));
 	ASSERT((ifp != NULL) && ((ifidx < DHD_MAX_IFS) && (ifp == dhd->iflist[ifidx])));
-
-#ifdef WL_MONITOR
-	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
-		datalen = skb->len;
-		ret = dhd_monitor_inject(skb, net);
-		goto done;
-	}
-#endif /* WL_MONITOR */
 
 	bcm_object_trace_opr(skb, BCM_OBJDBG_ADD_PKT, __FUNCTION__, __LINE__);
 
