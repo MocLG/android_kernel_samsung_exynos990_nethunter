@@ -72,6 +72,7 @@ bool dhd_monitor_netdev_enabled(struct net_device *dev);
 int dhd_monitor_set_chanspec(struct net_device *dev, u16 channel);
 int dhd_monitor_get_channel(struct net_device *dev);
 int dhd_monitor_inject(struct sk_buff *skb, struct net_device *dev);
+netdev_tx_t dhd_monitor_queue_inject(struct sk_buff *skb, struct net_device *net);
 #endif /* WL_MONITOR */
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)

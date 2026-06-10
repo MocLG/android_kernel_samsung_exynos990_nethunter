@@ -3201,6 +3201,71 @@ dhd_handle_pktdata(dhd_pub_t *dhdp, int ifidx, void *pkt, uint8 *pktdata, uint32
 	}
 }
 
+#ifdef WL_MONITOR
+struct dhd_monitor_inject_work {
+	struct work_struct work;
+	struct sk_buff *skb;
+	struct net_device *net;
+};
+
+static void
+dhd_monitor_inject_wq_adapter(struct work_struct *ptr)
+{
+	struct dhd_monitor_inject_work *work;
+	dhd_info_t *dhd;
+	int ret = BCME_OK;
+
+	work = container_of(ptr, struct dhd_monitor_inject_work, work);
+	dhd = DHD_DEV_INFO(work->net);
+
+	if (!dhd || dhd->pub.busstate == DHD_BUS_DOWN) {
+		dev_kfree_skb_any(work->skb);
+		dev_put(work->net);
+		kfree(work);
+		return;
+	}
+
+	DHD_OS_WAKE_LOCK(&dhd->pub);
+	ret = dhd_monitor_inject(work->skb, work->net);
+	DHD_OS_WAKE_UNLOCK(&dhd->pub);
+
+	if (ret != BCME_OK) {
+		DHD_ERROR_RLMT(("%s: monitor inject failed, ret=%d\n",
+			__FUNCTION__, ret));
+	}
+
+	dev_put(work->net);
+	kfree(work);
+}
+
+netdev_tx_t
+dhd_monitor_queue_inject(struct sk_buff *skb, struct net_device *net)
+{
+	struct dhd_monitor_inject_work *work;
+	dhd_info_t *dhd = DHD_DEV_INFO(net);
+
+	if (!dhd || !dhd->monitor_inject_wq) {
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	work = (struct dhd_monitor_inject_work *)kmalloc(sizeof(*work), GFP_ATOMIC);
+	if (!work) {
+		DHD_ERROR_RLMT(("%s: failed to queue monitor inject\n", __FUNCTION__));
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	INIT_WORK(&work->work, dhd_monitor_inject_wq_adapter);
+	work->skb = skb;
+	work->net = net;
+	dev_hold(net);
+	queue_work(dhd->monitor_inject_wq, &work->work);
+
+	return NETDEV_TX_OK;
+}
+#endif /* WL_MONITOR */
+
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 void dhd_rx_wq_wakeup(struct work_struct *ptr)
 {
@@ -3261,75 +3326,6 @@ void dhd_start_xmit_wq_adapter(struct work_struct *ptr)
 			   "error: dhd_start_xmit():%d\n", ret);
 }
 
-#ifdef WL_MONITOR
-static void
-dhd_monitor_inject_wq_adapter(struct work_struct *ptr)
-{
-	struct dhd_rx_tx_work *work;
-	dhd_info_t *dhd;
-	struct dhd_bus *bus;
-	int ret = BCME_OK;
-
-	work = container_of(ptr, struct dhd_rx_tx_work, work);
-	dhd = DHD_DEV_INFO(work->net);
-	bus = dhd->pub.bus;
-
-	if (atomic_read(&dhd->pub.block_bus) || dhd->pub.busstate == DHD_BUS_DOWN) {
-		dev_kfree_skb_any(work->skb);
-		kfree(work);
-		return;
-	}
-
-	DHD_OS_WAKE_LOCK(&dhd->pub);
-	if (bus && dhd->pub.busstate == DHD_BUS_SUSPEND) {
-		if (pm_runtime_get_sync(dhd_bus_to_dev(bus)) < 0) {
-			DHD_OS_WAKE_UNLOCK(&dhd->pub);
-			dev_kfree_skb_any(work->skb);
-			kfree(work);
-			return;
-		}
-
-		ret = dhd_monitor_inject(work->skb, work->net);
-		pm_runtime_mark_last_busy(dhd_bus_to_dev(bus));
-		pm_runtime_put_autosuspend(dhd_bus_to_dev(bus));
-	} else {
-		ret = dhd_monitor_inject(work->skb, work->net);
-	}
-	DHD_OS_WAKE_UNLOCK(&dhd->pub);
-
-	if (ret != BCME_OK) {
-		DHD_ERROR_RLMT(("%s: monitor inject failed, ret=%d\n",
-			__FUNCTION__, ret));
-	}
-	kfree(work);
-}
-
-static netdev_tx_t
-dhd_monitor_queue_inject(struct sk_buff *skb, struct net_device *net, dhd_info_t *dhd)
-{
-	struct dhd_rx_tx_work *work;
-
-	if (!dhd || !dhd->tx_wq) {
-		dev_kfree_skb_any(skb);
-		return NETDEV_TX_OK;
-	}
-
-	work = (struct dhd_rx_tx_work *)kmalloc(sizeof(*work), GFP_ATOMIC);
-	if (!work) {
-		DHD_ERROR_RLMT(("%s: failed to queue monitor inject\n", __FUNCTION__));
-		dev_kfree_skb_any(skb);
-		return NETDEV_TX_OK;
-	}
-
-	INIT_WORK(&work->work, dhd_monitor_inject_wq_adapter);
-	work->skb = skb;
-	work->net = net;
-	queue_work(dhd->tx_wq, &work->work);
-
-	return NETDEV_TX_OK;
-}
-#endif /* WL_MONITOR */
-
 netdev_tx_t
 BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
 {
@@ -3339,7 +3335,7 @@ BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
 
 #ifdef WL_MONITOR
 	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
-		return dhd_monitor_queue_inject(skb, net, dhd);
+		return dhd_monitor_queue_inject(skb, net);
 	}
 #endif /* WL_MONITOR */
 
@@ -9297,6 +9293,15 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 		goto fail;
 	}
 
+#ifdef WL_MONITOR
+	dhd->monitor_inject_wq = alloc_workqueue("bcmdhd-mon-inject-wq",
+		WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
+	if (!dhd->monitor_inject_wq) {
+		DHD_ERROR(("%s: alloc_workqueue(bcmdhd-mon-inject-wq) failed\n", __FUNCTION__));
+		goto fail;
+	}
+#endif /* WL_MONITOR */
+
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 	dhd->tx_wq = alloc_workqueue("bcmdhd-tx-wq", WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
 	if (!dhd->tx_wq) {
@@ -13958,6 +13963,13 @@ void dhd_detach(dhd_pub_t *dhdp)
 		}
 	}
 #endif
+
+#ifdef WL_MONITOR
+	if (dhd->monitor_inject_wq) {
+		destroy_workqueue(dhd->monitor_inject_wq);
+		dhd->monitor_inject_wq = NULL;
+	}
+#endif /* WL_MONITOR */
 
 #ifdef DHD_PCIE_NATIVE_RUNTIMEPM
 	destroy_workqueue(dhd->tx_wq);

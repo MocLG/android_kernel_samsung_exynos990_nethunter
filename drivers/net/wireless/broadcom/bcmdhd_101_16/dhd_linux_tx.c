@@ -593,12 +593,7 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 
 #ifdef WL_MONITOR
 	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
-		ret = dhd_monitor_inject(skb, net);
-		if (ret != BCME_OK) {
-			DHD_ERROR_RLMT(("%s: monitor inject failed, ret=%d\n",
-				__FUNCTION__, ret));
-		}
-		return NETDEV_TX_OK;
+		return dhd_monitor_queue_inject(skb, net);
 	}
 #endif /* WL_MONITOR */
 

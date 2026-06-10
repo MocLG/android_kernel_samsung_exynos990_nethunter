@@ -367,6 +367,7 @@ typedef struct dhd_info {
 	uint16	monitor_chanspec;
 	unsigned short monitor_primary_type;
 	bool	monitor_primary_type_valid;
+	struct workqueue_struct *monitor_inject_wq;
 #endif /* WL_MONITOR */
 #if defined(BT_OVER_SDIO)
     struct mutex bus_user_lock; /* lock for sdio bus apis shared between WLAN & BT */
