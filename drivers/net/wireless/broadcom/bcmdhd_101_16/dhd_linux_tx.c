@@ -42,6 +42,7 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
+#include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/etherdevice.h>
 #include <linux/random.h>
@@ -493,6 +494,66 @@ BCMFASTPATH(dhd_select_queue)(struct net_device *net, struct sk_buff *skb)
 }
 #endif /* DHD_MQ */
 
+#ifdef WL_MONITOR
+typedef struct dhd_nexmon_inject_frame {
+	uint16 len;
+	uint8 pad;
+	uint8 type;
+	uint8 data[0];
+} __attribute__((packed)) dhd_nexmon_inject_frame_t;
+
+int
+dhd_monitor_inject(struct sk_buff *skb, struct net_device *dev)
+{
+	dhd_info_t *dhd;
+	dhd_nexmon_inject_frame_t *frame;
+	uint inject_len;
+	int ifidx;
+	int ret;
+
+	if (!skb || !dev) {
+		return -EINVAL;
+	}
+
+	dhd = DHD_DEV_INFO(dev);
+	if (!dhd || !dhd->monitor_type) {
+		dev_kfree_skb_any(skb);
+		return -ENODEV;
+	}
+
+	ifidx = DHD_DEV_IFIDX(dev);
+	if (ifidx == DHD_BAD_IF) {
+		dev_kfree_skb_any(skb);
+		return -ENODEV;
+	}
+
+	if (skb->len == 0 ||
+		skb->len > (WLC_IOCTL_MAXLEN - sizeof(dhd_nexmon_inject_frame_t))) {
+		dev_kfree_skb_any(skb);
+		return -EMSGSIZE;
+	}
+
+	inject_len = skb->len + sizeof(dhd_nexmon_inject_frame_t);
+	frame = kmalloc(inject_len, GFP_ATOMIC);
+	if (!frame) {
+		dev_kfree_skb_any(skb);
+		return -ENOMEM;
+	}
+
+	frame->len = (uint16)inject_len;
+	frame->pad = 0;
+	frame->type = 1;
+	memcpy(frame->data, skb->data, skb->len);
+	dev_kfree_skb_any(skb);
+
+	ret = dhd_wl_ioctl_cmd(&dhd->pub, DHD_NEX_INJECT_FRAME,
+		frame, inject_len, TRUE, ifidx);
+	kfree(frame);
+
+	return ret;
+}
+#endif /* WL_MONITOR */
+
 netdev_tx_t
 BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 {
@@ -624,6 +685,14 @@ BCMFASTPATH(dhd_start_xmit)(struct sk_buff *skb, struct net_device *net)
 
 	ASSERT(ifidx == dhd_net2idx(dhd, net));
 	ASSERT((ifp != NULL) && ((ifidx < DHD_MAX_IFS) && (ifp == dhd->iflist[ifidx])));
+
+#ifdef WL_MONITOR
+	if (dhd_monitor_netdev_enabled(net) && net->type == ARPHRD_IEEE80211_RADIOTAP) {
+		datalen = skb->len;
+		ret = dhd_monitor_inject(skb, net);
+		goto done;
+	}
+#endif /* WL_MONITOR */
 
 	bcm_object_trace_opr(skb, BCM_OBJDBG_ADD_PKT, __FUNCTION__, __LINE__);
 

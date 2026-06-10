@@ -419,6 +419,12 @@ static s32 wl_cfg80211_get_station(struct wiphy *wiphy,
 static s32 wl_cfg80211_set_power_mgmt(struct wiphy *wiphy,
 	struct net_device *dev, bool enabled,
 	s32 timeout);
+#ifdef WL_MONITOR
+static int wl_cfg80211_set_monitor_channel(struct wiphy *wiphy,
+	struct cfg80211_chan_def *chandef);
+static int wl_cfg80211_get_channel(struct wiphy *wiphy,
+	struct wireless_dev *wdev, struct cfg80211_chan_def *chandef);
+#endif /* WL_MONITOR */
 static int wl_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	struct cfg80211_connect_params *sme);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0))
@@ -2229,10 +2235,12 @@ wl_cfg80211_add_monitor_if(struct wiphy *wiphy, const char *name)
 	WL_ERR(("wl_cfg80211_add_monitor_if: No more support monitor interface\n"));
 	return ERR_PTR(-EOPNOTSUPP);
 #else
-	struct wireless *wdev;
+	struct wireless_dev *wdev;
 	struct net_device* ndev = NULL;
 
-	dhd_add_monitor(name, &ndev);
+	if (dhd_add_monitor(name, &ndev) < 0 || !ndev) {
+		return ERR_PTR(-ENODEV);
+	}
 
 	wdev = kzalloc(sizeof(*wdev), GFP_KERNEL);
 	if (!wdev) {
@@ -2241,12 +2249,18 @@ wl_cfg80211_add_monitor_if(struct wiphy *wiphy, const char *name)
 	}
 
 	wdev->wiphy = wiphy;
-	wdev->iftype = iface_type;
+	wdev->iftype = NL80211_IFTYPE_MONITOR;
 	ndev->ieee80211_ptr = wdev;
 	SET_NETDEV_DEV(ndev, wiphy_dev(wiphy));
 
 	WL_DBG(("wl_cfg80211_add_monitor_if net device returned: 0x%p\n", ndev));
 	return ndev->ieee80211_ptr;
+
+fail:
+	if (ndev) {
+		dhd_del_monitor(ndev);
+	}
+	return ERR_PTR(-ENOMEM);
 #endif /* WL_ENABLE_P2P_IF || WL_CFG80211_P2P_DEV_IF */
 }
 
@@ -3315,6 +3329,9 @@ wl_iftype_to_mode(wl_iftype_t iftype)
 		case WL_IF_TYPE_NAN:
 			mode = WL_MODE_NAN;
 			break;
+		case WL_IF_TYPE_MONITOR:
+			mode = WL_MODE_BSS;
+			break;
 
 		case WL_IF_TYPE_AIBSS:
 			/* Intentional fall through */
@@ -3355,8 +3372,9 @@ cfg80211_to_wl_iftype(uint16 type, uint16 *role, uint16 *mode)
 			*mode = WL_MODE_BSS;
 			break;
 		case NL80211_IFTYPE_MONITOR:
-			WL_ERR(("Unsupported mode \n"));
-			return BCME_UNSUPPORTED;
+			*role = WL_IF_TYPE_MONITOR;
+			*mode = WL_MODE_BSS;
+			break;
 		case NL80211_IFTYPE_ADHOC:
 			*role = WL_IF_TYPE_IBSS;
 			*mode = WL_MODE_IBSS;
@@ -9616,6 +9634,87 @@ exit:
 }
 #endif /* WL_SUPPORT_ACS */
 
+#ifdef WL_MONITOR
+static int
+wl_cfg80211_set_monitor_channel(struct wiphy *wiphy, struct cfg80211_chan_def *chandef)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *ndev = bcmcfg_to_prmry_ndev(cfg);
+	int channel;
+	int err;
+
+	if (!ndev || !chandef || !chandef->chan) {
+		return -EINVAL;
+	}
+
+	channel = ieee80211_frequency_to_channel(chandef->chan->center_freq);
+	if (!CH_NUM_VALID_RANGE(channel)) {
+		return -EINVAL;
+	}
+
+	err = dhd_monitor_set_chanspec(ndev, channel);
+	if (err != BCME_OK) {
+		WL_ERR(("monitor chanspec set failed: channel=%d err=%d\n", channel, err));
+		return err;
+	}
+
+	return BCME_OK;
+}
+
+static int
+wl_cfg80211_get_channel(struct wiphy *wiphy, struct wireless_dev *wdev,
+	struct cfg80211_chan_def *chandef)
+{
+	struct bcm_cfg80211 *cfg = wiphy_priv(wiphy);
+	struct net_device *ndev;
+	struct ieee80211_channel *chan;
+	chanspec_t chanspec = 0;
+	u32 channel;
+	u32 freq;
+	int err;
+
+	if (!chandef) {
+		return -EINVAL;
+	}
+
+	if (wdev && wdev->iftype == NL80211_IFTYPE_MONITOR) {
+		ndev = bcmcfg_to_prmry_ndev(cfg);
+	} else {
+		ndev = (wdev && wdev->netdev) ? wdev->netdev : bcmcfg_to_prmry_ndev(cfg);
+	}
+	if (!ndev) {
+		return -ENODEV;
+	}
+
+	if (dhd_monitor_netdev_enabled(ndev)) {
+		err = dhd_monitor_get_channel(ndev);
+		if (err <= 0) {
+			return err ? err : -ENODATA;
+		}
+		channel = err;
+		freq = wl_channel_to_frequency(channel,
+			(channel <= CH_MAX_2G_CHANNEL) ?
+			WL_CHANSPEC_BAND_2G : WL_CHANSPEC_BAND_5G);
+	} else {
+		err = wldev_iovar_getint(ndev, "chanspec", (s32 *)&chanspec);
+		if (unlikely(err)) {
+			WL_ERR(("Could not get chanspec %d\n", err));
+			return err;
+		}
+		chanspec = wl_chspec_driver_to_host(chanspec);
+		freq = wl_channel_to_frequency(wf_chspec_ctlchan(chanspec), CHSPEC_BAND(chanspec));
+	}
+
+	chan = ieee80211_get_channel(wiphy, freq);
+	if (!chan) {
+		return -ENOENT;
+	}
+
+	cfg80211_chandef_create(chandef, chan, NL80211_CHAN_HT20);
+	return BCME_OK;
+}
+#endif /* WL_MONITOR */
+
 static struct cfg80211_ops wl_cfg80211_ops = {
 	.add_virtual_intf = wl_cfg80211_add_virtual_iface,
 	.del_virtual_intf = wl_cfg80211_del_virtual_iface,
@@ -9651,6 +9750,10 @@ static struct cfg80211_ops wl_cfg80211_ops = {
 	.mgmt_tx = wl_cfg80211_mgmt_tx,
 	.mgmt_frame_register = wl_cfg80211_mgmt_frame_register,
 	.change_bss = wl_cfg80211_change_bss,
+#ifdef WL_MONITOR
+	.set_monitor_channel = wl_cfg80211_set_monitor_channel,
+	.get_channel = wl_cfg80211_get_channel,
+#endif /* WL_MONITOR */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)) || defined(WL_COMPAT_WIRELESS)
 	.set_channel = wl_cfg80211_set_channel,
 #endif /* ((LINUX_VERSION < VERSION(3, 6, 0)) || WL_COMPAT_WIRELESS */

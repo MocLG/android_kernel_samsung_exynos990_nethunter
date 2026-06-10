@@ -359,9 +359,14 @@ typedef struct dhd_info {
 #endif /* defined (BT_OVER_SDIO) */
 #ifdef WL_MONITOR
 	struct net_device *monitor_dev; /* monitor pseudo device */
+	struct net_device *monitor_primary_dev;
 	struct sk_buff *monitor_skb;
 	uint	monitor_len;
 	uint	monitor_type;   /* monitor pseudo device */
+	uint16	monitor_channel;
+	uint16	monitor_chanspec;
+	unsigned short monitor_primary_type;
+	bool	monitor_primary_type_valid;
 #endif /* WL_MONITOR */
 #if defined(BT_OVER_SDIO)
     struct mutex bus_user_lock; /* lock for sdio bus apis shared between WLAN & BT */

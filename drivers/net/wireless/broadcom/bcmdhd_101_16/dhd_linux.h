@@ -60,6 +60,15 @@
 #ifdef WL_MONITOR
 #define MAX_RADIOTAP_SIZE      256 /* Maximum size to hold HE Radiotap header format */
 #define MAX_MON_PKT_SIZE       (4096 + MAX_RADIOTAP_SIZE)
+#define DHD_MONITOR_DISABLED   0
+#define DHD_MONITOR_IEEE80211  (1 << 0)
+#define DHD_MONITOR_RADIOTAP   (1 << 1)
+#define DHD_NEX_INJECT_FRAME   408
+
+bool dhd_monitor_netdev_enabled(struct net_device *dev);
+int dhd_monitor_set_chanspec(struct net_device *dev, u16 channel);
+int dhd_monitor_get_channel(struct net_device *dev);
+int dhd_monitor_inject(struct sk_buff *skb, struct net_device *dev);
 #endif /* WL_MONITOR */
 
 #if !defined(CONFIG_WIFI_CONTROL_FUNC)

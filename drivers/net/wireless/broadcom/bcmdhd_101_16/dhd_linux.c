@@ -39,9 +39,11 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/ktime.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
+#include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/etherdevice.h>
 #include <linux/random.h>
@@ -62,11 +64,13 @@
 #include <linux/rtc.h>
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
+#include <net/ieee80211_radiotap.h>
 #include <dhd_linux_priv.h>
 
 #include <epivers.h>
 #include <bcmutils.h>
 #include <bcmendian.h>
+#include <bcmwifi_channels.h>
 #include <bcmdevs.h>
 #include <bcmdevs_legacy.h>    /* need to still support chips no longer in trunk firmware */
 #include <bcmiov.h>
@@ -3265,9 +3269,14 @@ BCMFASTPATH(dhd_start_xmit_wrapper)(struct sk_buff *skb, struct net_device *net)
     dhd_info_t *dhd = DHD_DEV_INFO(net);
 
     /* NetHunter Extreme: Bypass connection check for injection */
-    if (!dhd->pub.up && !dhd->pub.monitor) {
-        DHD_TRACE(("%s: xmit rejected: up %d, mon %d\n", 
-                  __FUNCTION__, dhd->pub.up, dhd->pub.monitor));
+#ifdef WL_MONITOR
+    if (!dhd->pub.up && !dhd->pub.monitor_enable) {
+        DHD_TRACE(("%s: xmit rejected: up %d, mon %d\n",
+                  __FUNCTION__, dhd->pub.up, dhd->pub.monitor_enable));
+#else
+    if (!dhd->pub.up) {
+        DHD_TRACE(("%s: xmit rejected: up %d\n", __FUNCTION__, dhd->pub.up));
+#endif /* WL_MONITOR */
         PKTFREE(dhd->pub.osh, skb, FALSE);
         return -ENETDOWN;
     }
@@ -5605,6 +5614,292 @@ dhd_monitor_enabled(dhd_pub_t *dhd, int ifidx)
 	return (dhd->info->monitor_type != 0);
 }
 
+#ifndef ARPHRD_IEEE80211_RADIOTAP
+#define ARPHRD_IEEE80211_RADIOTAP	803 /* IEEE 802.11 + radiotap header */
+#endif /* ARPHRD_IEEE80211_RADIOTAP */
+
+static struct net_device *
+dhd_monitor_primary_dev(dhd_info_t *dhd, int ifidx)
+{
+	struct net_device *dev = NULL;
+
+	if (!dhd) {
+		return NULL;
+	}
+
+	if (dhd->monitor_primary_dev) {
+		return dhd->monitor_primary_dev;
+	}
+
+	dev = dhd_idx2net(&dhd->pub, ifidx);
+	if (!dev) {
+		dev = dhd_idx2net(&dhd->pub, 0);
+	}
+
+	return dev;
+}
+
+typedef struct dhd_monitor_radiotap {
+	struct ieee80211_radiotap_header hdr;
+	__le64 tsft;
+	uint8 flags;
+	uint8 pad;
+	__le16 channel_freq;
+	__le16 channel_flags;
+	int8 signal;
+} __attribute__((packed)) dhd_monitor_radiotap_t;
+
+#define DHD_MONITOR_RADIOTAP_PRESENT \
+	((1 << IEEE80211_RADIOTAP_TSFT) | \
+	(1 << IEEE80211_RADIOTAP_FLAGS) | \
+	(1 << IEEE80211_RADIOTAP_CHANNEL) | \
+	(1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL))
+
+static bool
+dhd_monitor_has_radiotap(struct sk_buff *skb)
+{
+	struct ieee80211_radiotap_header *rtap;
+	uint16 len;
+
+	if (!skb || skb->len < sizeof(*rtap)) {
+		return FALSE;
+	}
+
+	rtap = (struct ieee80211_radiotap_header *)skb->data;
+	len = le16_to_cpu(rtap->it_len);
+
+	return (rtap->it_version == PKTHDR_RADIOTAP_VERSION &&
+		len >= sizeof(*rtap) && len <= skb->len && len <= MAX_RADIOTAP_SIZE);
+}
+
+static uint16
+dhd_monitor_channel_to_frequency(uint16 channel)
+{
+	if (channel == 14) {
+		return 2484;
+	} else if (channel < 14) {
+		return 2407 + (channel * 5);
+	} else if (channel >= 182 && channel <= 196) {
+		return 4000 + (channel * 5);
+	}
+
+	return 5000 + (channel * 5);
+}
+
+static struct sk_buff *
+dhd_monitor_add_radiotap(dhd_info_t *dhd, struct sk_buff *skb)
+{
+	dhd_monitor_radiotap_t *rtap;
+	struct sk_buff *nskb;
+	uint16 channel = dhd->monitor_channel;
+
+	if (!skb || ((dhd->monitor_type & DHD_MONITOR_RADIOTAP) &&
+		dhd_monitor_has_radiotap(skb))) {
+		return skb;
+	}
+
+	if (!channel && dhd->monitor_chanspec) {
+		channel = wf_chspec_ctlchan(dhd->monitor_chanspec);
+	}
+	if (!channel) {
+		channel = 1;
+	}
+
+	if (skb_headroom(skb) < sizeof(dhd_monitor_radiotap_t)) {
+		nskb = skb_copy_expand(skb, sizeof(dhd_monitor_radiotap_t), 0, GFP_ATOMIC);
+		dev_kfree_skb_any(skb);
+		skb = nskb;
+		if (!skb) {
+			return NULL;
+		}
+	}
+
+	rtap = (dhd_monitor_radiotap_t *)skb_push(skb, sizeof(*rtap));
+	memset(rtap, 0, sizeof(*rtap));
+	rtap->hdr.it_version = PKTHDR_RADIOTAP_VERSION;
+	rtap->hdr.it_len = cpu_to_le16(sizeof(*rtap));
+	rtap->hdr.it_present = cpu_to_le32(DHD_MONITOR_RADIOTAP_PRESENT);
+	rtap->tsft = cpu_to_le64(ktime_get_ns() / NSEC_PER_USEC);
+	rtap->flags = 0;
+	rtap->channel_freq = cpu_to_le16(dhd_monitor_channel_to_frequency(channel));
+	rtap->channel_flags = cpu_to_le16((channel <= CH_MAX_2G_CHANNEL) ?
+		(IEEE80211_CHAN_2GHZ | IEEE80211_CHAN_CCK) :
+		(IEEE80211_CHAN_5GHZ | IEEE80211_CHAN_OFDM));
+	rtap->signal = -95;
+
+	return skb;
+}
+
+static bool
+dhd_monitor_prepare_rx_skb(dhd_info_t *dhd, struct sk_buff **pskb, int ifidx)
+{
+	struct net_device *dev;
+	struct sk_buff *skb;
+
+	if (!dhd || !pskb || !*pskb || !dhd->monitor_type) {
+		return FALSE;
+	}
+
+	dev = dhd_monitor_primary_dev(dhd, ifidx);
+	if (!dev) {
+		return FALSE;
+	}
+
+	skb = dhd_monitor_add_radiotap(dhd, *pskb);
+	if (!skb) {
+		*pskb = NULL;
+		return FALSE;
+	}
+
+	skb->dev = dev;
+	skb_reset_mac_header(skb);
+	skb->protocol = htons(ETH_P_802_2);
+	skb->ip_summed = CHECKSUM_NONE;
+	*pskb = skb;
+
+	return TRUE;
+}
+
+static void
+dhd_monitor_drop_assembled_skb(dhd_info_t *dhd)
+{
+	if (dhd && dhd->monitor_skb) {
+		dev_kfree_skb_any(dhd->monitor_skb);
+		dhd->monitor_skb = NULL;
+		dhd->monitor_len = 0;
+	}
+}
+
+bool
+dhd_monitor_netdev_enabled(struct net_device *dev)
+{
+	dhd_info_t *dhd;
+
+	if (!dev) {
+		return FALSE;
+	}
+
+	dhd = DHD_DEV_INFO(dev);
+	return (dhd && dhd->monitor_type != DHD_MONITOR_DISABLED);
+}
+
+static void
+dhd_monitor_set_primary_type(dhd_info_t *dhd, int ifidx, bool enable)
+{
+	struct net_device *dev;
+
+	dev = dhd_monitor_primary_dev(dhd, ifidx);
+	if (!dev) {
+		return;
+	}
+
+	if (enable) {
+		if (!dhd->monitor_primary_type_valid) {
+			dhd->monitor_primary_type = dev->type;
+			dhd->monitor_primary_type_valid = TRUE;
+		}
+		dhd->monitor_primary_dev = dev;
+		dev->type = ARPHRD_IEEE80211_RADIOTAP;
+		if (dev->ieee80211_ptr) {
+			dev->ieee80211_ptr->iftype = NL80211_IFTYPE_MONITOR;
+		}
+	} else {
+		if (dhd->monitor_primary_type_valid) {
+			dev->type = dhd->monitor_primary_type;
+		} else {
+			dev->type = ARPHRD_ETHER;
+		}
+		if (dev->ieee80211_ptr &&
+			dev->ieee80211_ptr->iftype == NL80211_IFTYPE_MONITOR) {
+			dev->ieee80211_ptr->iftype = NL80211_IFTYPE_STATION;
+		}
+		dhd->monitor_primary_dev = NULL;
+		dhd->monitor_primary_type_valid = FALSE;
+	}
+}
+
+int
+dhd_monitor_set_chanspec(struct net_device *dev, u16 channel)
+{
+	dhd_info_t *dhd;
+	int ifidx;
+	int ret;
+	chanspec_t chanspec;
+	char buf[13];
+
+	if (!dev || !CH_NUM_VALID_RANGE(channel)) {
+		return -EINVAL;
+	}
+
+	dhd = DHD_DEV_INFO(dev);
+	if (!dhd) {
+		return -ENODEV;
+	}
+
+	ifidx = dhd_net2idx(dhd, dev);
+	if (ifidx == DHD_BAD_IF) {
+		ifidx = 0;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	memcpy(buf, "chanspec", sizeof("chanspec"));
+	chanspec = CH20MHZ_CHSPEC(channel);
+	memcpy(buf + sizeof("chanspec"), &chanspec, sizeof(chanspec));
+
+	ret = dhd_wl_ioctl_cmd(&dhd->pub, WLC_SET_VAR, buf, sizeof(buf), TRUE, ifidx);
+	if (ret == BCME_OK) {
+		dhd->monitor_channel = channel;
+		dhd->monitor_chanspec = chanspec;
+	}
+
+	return ret;
+}
+
+int
+dhd_monitor_get_channel(struct net_device *dev)
+{
+	dhd_info_t *dhd;
+	int ifidx;
+	int ret;
+	chanspec_t chanspec = 0;
+	char buf[13];
+
+	if (!dev) {
+		return -EINVAL;
+	}
+
+	dhd = DHD_DEV_INFO(dev);
+	if (!dhd) {
+		return -ENODEV;
+	}
+
+	if (dhd->monitor_channel) {
+		return dhd->monitor_channel;
+	}
+
+	ifidx = dhd_net2idx(dhd, dev);
+	if (ifidx == DHD_BAD_IF) {
+		ifidx = 0;
+	}
+
+	memset(buf, 0, sizeof(buf));
+	memcpy(buf, "chanspec", sizeof("chanspec"));
+	ret = dhd_wl_ioctl_cmd(&dhd->pub, WLC_GET_VAR, buf, sizeof(buf), FALSE, ifidx);
+	if (ret != BCME_OK) {
+		return ret;
+	}
+
+	memcpy(&chanspec, buf, sizeof(chanspec));
+	if (!chanspec) {
+		return -ENODATA;
+	}
+
+	dhd->monitor_chanspec = chanspec;
+	dhd->monitor_channel = wf_chspec_ctlchan(chanspec);
+
+	return dhd->monitor_channel;
+}
+
 void
 dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 {
@@ -5620,15 +5915,11 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 						== NULL)
 						return;
 				}
-				if (dhd->monitor_type && dhd->monitor_dev)
-					dhd->monitor_skb->dev = dhd->monitor_dev;
-				else {
-					PKTFREE(dhdp->osh, pkt, FALSE);
+				if (!dhd_monitor_prepare_rx_skb(dhd, &dhd->monitor_skb, ifidx)) {
+					dhd_monitor_drop_assembled_skb(dhd);
 					dhd->monitor_skb = NULL;
 					return;
 				}
-				dhd->monitor_skb->protocol =
-					eth_type_trans(dhd->monitor_skb, dhd->monitor_skb->dev);
 				dhd->monitor_len = 0;
 				break;
 
@@ -5639,11 +5930,14 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 						return;
 					dhd->monitor_len = 0;
 				}
-				if (dhd->monitor_type && dhd->monitor_dev)
-					dhd->monitor_skb->dev = dhd->monitor_dev;
-				else {
+				if (!dhd->monitor_type || !dhd_monitor_primary_dev(dhd, ifidx)) {
 					PKTFREE(dhdp->osh, pkt, FALSE);
-					dev_kfree_skb(dhd->monitor_skb);
+					dhd_monitor_drop_assembled_skb(dhd);
+					return;
+				}
+				if (PKTLEN(dhdp->osh, pkt) > MAX_MON_PKT_SIZE) {
+					PKTFREE(dhdp->osh, pkt, FALSE);
+					dhd_monitor_drop_assembled_skb(dhd);
 					return;
 				}
 				memcpy(PKTDATA(dhdp->osh, dhd->monitor_skb),
@@ -5653,6 +5947,12 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 				return;
 
 			case BCMPCIE_PKT_FLAGS_MONITOR_INTER_PKT:
+				if (!dhd->monitor_skb ||
+					(dhd->monitor_len + PKTLEN(dhdp->osh, pkt) > MAX_MON_PKT_SIZE)) {
+					PKTFREE(dhdp->osh, pkt, FALSE);
+					dhd_monitor_drop_assembled_skb(dhd);
+					return;
+				}
 				memcpy(PKTDATA(dhdp->osh, dhd->monitor_skb) + dhd->monitor_len,
 				PKTDATA(dhdp->osh, pkt), PKTLEN(dhdp->osh, pkt));
 				dhd->monitor_len += PKTLEN(dhdp->osh, pkt);
@@ -5660,13 +5960,21 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 				return;
 
 			case BCMPCIE_PKT_FLAGS_MONITOR_LAST_PKT:
+				if (!dhd->monitor_skb ||
+					(dhd->monitor_len + PKTLEN(dhdp->osh, pkt) > MAX_MON_PKT_SIZE)) {
+					PKTFREE(dhdp->osh, pkt, FALSE);
+					dhd_monitor_drop_assembled_skb(dhd);
+					return;
+				}
 				memcpy(PKTDATA(dhdp->osh, dhd->monitor_skb) + dhd->monitor_len,
 				PKTDATA(dhdp->osh, pkt), PKTLEN(dhdp->osh, pkt));
 				dhd->monitor_len += PKTLEN(dhdp->osh, pkt);
 				PKTFREE(dhdp->osh, pkt, FALSE);
 				skb_put(dhd->monitor_skb, dhd->monitor_len);
-				dhd->monitor_skb->protocol =
-					eth_type_trans(dhd->monitor_skb, dhd->monitor_skb->dev);
+				if (!dhd_monitor_prepare_rx_skb(dhd, &dhd->monitor_skb, ifidx)) {
+					dhd_monitor_drop_assembled_skb(dhd);
+					return;
+				}
 				dhd->monitor_len = 0;
 				break;
 		}
@@ -5674,7 +5982,7 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 
 	/* XXX WL here makes sure data is 4-byte aligned? */
 	if (in_interrupt()) {
-		bcm_object_trace_opr(skb, BCM_OBJDBG_REMOVE,
+		bcm_object_trace_opr(dhd->monitor_skb, BCM_OBJDBG_REMOVE,
 			__FUNCTION__, __LINE__);
 		netif_rx(dhd->monitor_skb);
 	} else {
@@ -5695,6 +6003,8 @@ dhd_rx_mon_pkt(dhd_pub_t *dhdp, host_rxbuf_cmpl_t* msg, void *pkt, int ifidx)
 
 typedef struct dhd_mon_dev_priv {
 	struct net_device_stats stats;
+	dhd_info_t *dhd;
+	struct net_device *real_dev;
 } dhd_mon_dev_priv_t;
 
 #define DHD_MON_DEV_PRIV_SIZE		(sizeof(dhd_mon_dev_priv_t))
@@ -5704,8 +6014,16 @@ typedef struct dhd_mon_dev_priv {
 static int
 dhd_monitor_start(struct sk_buff *skb, struct net_device *dev)
 {
-    /* NetHunter Extreme: Redirect monitor packets to the real TX path */
-    return dhd_start_xmit(skb, dev);
+	dhd_mon_dev_priv_t *priv = DHD_MON_DEV_PRIV(dev);
+
+	if (!priv || !priv->real_dev) {
+		DHD_MON_DEV_STATS(dev).tx_dropped++;
+		dev_kfree_skb_any(skb);
+		return NETDEV_TX_OK;
+	}
+
+	skb->dev = priv->real_dev;
+	return dhd_start_xmit(skb, priv->real_dev);
 }
 
 #if defined(BT_OVER_SDIO)
@@ -5959,6 +6277,7 @@ static void
 dhd_add_monitor_if(dhd_info_t *dhd)
 {
 	struct net_device *dev;
+	dhd_mon_dev_priv_t *priv;
 	char *devname;
 	uint32 scan_suppress = FALSE;
 	int ret = BCME_OK;
@@ -5994,18 +6313,16 @@ dhd_add_monitor_if(dhd_info_t *dhd)
 	dev->type = ARPHRD_IEEE80211_RADIOTAP;
 
 	dev->netdev_ops = &netdev_monitor_ops;
+	priv = DHD_MON_DEV_PRIV(dev);
+	priv->dhd = dhd;
+	priv->real_dev = dhd_monitor_primary_dev(dhd, 0);
 
 	/* XXX: This is called from IOCTL path, in this case, rtnl_lock is already taken.
 	 * So, register_netdev() shouldn't be called. It leads to deadlock.
 	 * To avoid deadlock due to rtnl_lock(), register_netdevice() should be used.
 	 */
 	/* NetHunter Extreme: Set TX Queue for High-Speed Injection */
-    dev->tx_queue_len = 1024;
-    
-    /* Force Monitor Mode capability flag */
-    #ifdef CONFIG_BCMDHD_MONITOR
-    dhd->pub.monitor = TRUE;
-    #endif
+	dev->tx_queue_len = 1024;
 
     /* Existing Samsung Code: */
 	if (register_netdevice(dev)) {
@@ -6082,18 +6399,24 @@ static void
 dhd_set_monitor(dhd_pub_t *pub, int ifidx, int val)
 {
 	dhd_info_t *dhd = pub->info;
+	bool enable = (val != DHD_MONITOR_DISABLED);
 
 	DHD_TRACE(("%s: val %d\n", __FUNCTION__, val));
 
 	dhd_net_if_lock_local(dhd);
-	if (!val) {
-			/* Delete monitor */
-			dhd_del_monitor_if(dhd);
+	if (!enable) {
+		dhd_del_monitor_if(dhd);
+		dhd->monitor_type = DHD_MONITOR_DISABLED;
+		dhd->monitor_channel = 0;
+		dhd->monitor_chanspec = 0;
+		dhd_monitor_set_primary_type(dhd, ifidx, FALSE);
+		pub->monitor_enable = FALSE;
 	} else {
-			/* Add monitor */
-			dhd_add_monitor_if(dhd);
+		dhd->monitor_type = val;
+		dhd_monitor_set_primary_type(dhd, ifidx, TRUE);
+		dhd_add_monitor_if(dhd);
+		pub->monitor_enable = TRUE;
 	}
-	dhd->monitor_type = val;
 	dhd_net_if_unlock_local(dhd);
 }
 #endif /* WL_MONITOR */
@@ -6148,6 +6471,9 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 	int bcmerror = BCME_OK;
 	int buflen = 0;
 	struct net_device *net;
+#ifdef WL_MONITOR
+	bool monitor_chanspec_iovar = FALSE;
+#endif /* WL_MONITOR */
 
 	net = dhd_idx2net(pub, ifidx);
 	if (!net) {
@@ -6237,10 +6563,37 @@ int dhd_ioctl_process(dhd_pub_t *pub, int ifidx, dhd_ioctl_t *ioc, void *data_bu
 		goto done;
 	}
 
+#ifdef WL_MONITOR
+	if ((ioc->cmd == WLC_SET_VAR || ioc->cmd == WLC_GET_VAR) &&
+		data_buf != NULL && buflen >= sizeof("chanspec") &&
+		strncmp("chanspec", data_buf, sizeof("chanspec")) == 0) {
+		monitor_chanspec_iovar = TRUE;
+	}
+#endif /* WL_MONITOR */
+
 	/* XXX this typecast is BAD !!! */
 	bcmerror = dhd_wl_ioctl(pub, ifidx, (wl_ioctl_t *)ioc, data_buf, buflen);
 
 #ifdef WL_MONITOR
+	if (monitor_chanspec_iovar) {
+		dhd_info_t *dhd = pub->info;
+		chanspec_t chanspec;
+
+		if (ioc->cmd == WLC_SET_VAR && bcmerror == BCME_OK &&
+			buflen >= sizeof("chanspec") + sizeof(chanspec)) {
+			memcpy(&chanspec, (char *)data_buf + sizeof("chanspec"),
+				sizeof(chanspec));
+			if (chanspec) {
+				dhd->monitor_chanspec = chanspec;
+				dhd->monitor_channel = wf_chspec_ctlchan(chanspec);
+			}
+		} else if (ioc->cmd == WLC_GET_VAR && dhd->monitor_type &&
+			dhd->monitor_chanspec && buflen >= sizeof(chanspec)) {
+			memcpy(data_buf, &dhd->monitor_chanspec, sizeof(chanspec));
+			bcmerror = BCME_OK;
+		}
+	}
+
 	/* Intercept monitor ioctl here, add/del monitor if */
 	if (bcmerror == BCME_OK && ioc->cmd == WLC_SET_MONITOR) {
 		int val = 0;

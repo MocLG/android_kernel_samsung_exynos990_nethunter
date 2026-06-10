@@ -1015,6 +1015,42 @@ wl_cfg80211_change_virtual_iface(struct wiphy *wiphy, struct net_device *ndev,
 		ndev->name, ndev->ieee80211_ptr->iftype, type));
 	primary_ndev = bcmcfg_to_prmry_ndev(cfg);
 
+#ifdef WL_MONITOR
+	if (type == NL80211_IFTYPE_MONITOR) {
+		s32 monitor = DHD_MONITOR_RADIOTAP;
+
+		if (ndev != primary_ndev) {
+			WL_ERR(("Monitor mode is supported only on primary interface\n"));
+			return -EOPNOTSUPP;
+		}
+
+		mutex_lock(&cfg->if_sync);
+		err = wldev_ioctl_set(ndev, WLC_SET_MONITOR, &monitor, sizeof(monitor));
+		if (err == BCME_OK) {
+			ndev->ieee80211_ptr->iftype = NL80211_IFTYPE_MONITOR;
+		}
+		mutex_unlock(&cfg->if_sync);
+		return err;
+	}
+
+	if (ndev->ieee80211_ptr->iftype == NL80211_IFTYPE_MONITOR) {
+		s32 monitor = DHD_MONITOR_DISABLED;
+
+		mutex_lock(&cfg->if_sync);
+		err = wldev_ioctl_set(ndev, WLC_SET_MONITOR, &monitor, sizeof(monitor));
+		if (err < 0) {
+			mutex_unlock(&cfg->if_sync);
+			return err;
+		}
+		if (type == NL80211_IFTYPE_STATION) {
+			ndev->ieee80211_ptr->iftype = NL80211_IFTYPE_STATION;
+			mutex_unlock(&cfg->if_sync);
+			return BCME_OK;
+		}
+		mutex_unlock(&cfg->if_sync);
+	}
+#endif /* WL_MONITOR */
+
 	if (cfg80211_to_wl_iftype(type, &wl_iftype, &wl_mode) < 0) {
 		WL_ERR(("Unknown role \n"));
 		return -EINVAL;
