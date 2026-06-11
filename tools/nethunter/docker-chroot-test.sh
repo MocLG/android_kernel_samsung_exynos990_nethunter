@@ -6,6 +6,7 @@ SCRIPT_NAME="${0##*/}"
 DOCKER_DATA_ROOT="${DOCKER_DATA_ROOT:-/var/lib/docker}"
 DOCKER_LOG="${DOCKER_LOG:-/tmp/nethunter-dockerd.log}"
 DOCKER_PIDFILE="${DOCKER_PIDFILE:-/tmp/nethunter-dockerd.pid}"
+DOCKER_ROUTE_STATE="${DOCKER_ROUTE_STATE:-/tmp/nethunter-docker-main-default.before}"
 DOCKER_STORAGE_DRIVER="${DOCKER_STORAGE_DRIVER:-auto}"
 DOCKER_BRIDGE_CIDR="${DOCKER_BRIDGE_CIDR:-172.17.0.1/16}"
 DOCKER_NAT_CIDR="${DOCKER_NAT_CIDR:-172.16.0.0/12}"
@@ -15,9 +16,15 @@ DOCKER_EXTERNAL_CONTAINERD="${DOCKER_EXTERNAL_CONTAINERD:-1}"
 DOCKER_CONTAINERD_SNAPSHOTTER="${DOCKER_CONTAINERD_SNAPSHOTTER:-auto}"
 DOCKER_UNSHARE_MOUNT_NS="${DOCKER_UNSHARE_MOUNT_NS:-1}"
 DOCKER_FIX_MOUNT_PROPAGATION="${DOCKER_FIX_MOUNT_PROPAGATION:-1}"
+DOCKER_BIND_ANDROID_BPF="${DOCKER_BIND_ANDROID_BPF:-1}"
+DOCKER_USE_ANDROID_IPTABLES="${DOCKER_USE_ANDROID_IPTABLES:-auto}"
+DOCKER_CLEAN_IPTABLES="${DOCKER_CLEAN_IPTABLES:-1}"
 DOCKER_RUNC_WRAPPER="${DOCKER_RUNC_WRAPPER:-1}"
+DOCKER_RUNC_PRELOAD="${DOCKER_RUNC_PRELOAD:-1}"
+ANDROID_IPTABLES_WRAPPER_DIR="${ANDROID_IPTABLES_WRAPPER_DIR:-/tmp/nethunter-android-iptables-bin}"
 RUNC_WRAPPER_PATH="${RUNC_WRAPPER_PATH:-/tmp/nethunter-runc-wrapper}"
 RUNC_WRAPPER_LOG="${RUNC_WRAPPER_LOG:-/tmp/nethunter-runc-wrapper.log}"
+RUNC_PRELOAD_PATH="${RUNC_PRELOAD_PATH:-$(dirname "$RUNC_WRAPPER_PATH")/nethunter-runc-preload.so}"
 CONTAINERD_ROOT="${CONTAINERD_ROOT:-/var/lib/nethunter-containerd}"
 CONTAINERD_STATE="${CONTAINERD_STATE:-/run/nethunter-containerd}"
 CONTAINERD_CONFIG="${CONTAINERD_CONFIG:-/tmp/nethunter-containerd.toml}"
@@ -26,6 +33,7 @@ CONTAINERD_PIDFILE="${CONTAINERD_PIDFILE:-/tmp/nethunter-containerd.pid}"
 CONTAINERD_SOCK="${CONTAINERD_SOCK:-/run/nethunter-containerd/containerd.sock}"
 TEST_NETWORK="${TEST_NETWORK:-nhtest}"
 TEST_TIMEOUT="${TEST_TIMEOUT:-60}"
+ANDROID_IPTABLES_ACTIVE=0
 
 log() {
     printf '[%s] %s\n' "$SCRIPT_NAME" "$*"
@@ -45,6 +53,13 @@ require_root() {
     [ "$(id -u)" = "0" ] || die "run this inside the Kali chroot as root"
 }
 
+normalize_tmpdir() {
+    mkdir -p /tmp
+    if [ -z "${TMPDIR:-}" ] || [ ! -d "$TMPDIR" ]; then
+        export TMPDIR=/tmp
+    fi
+}
+
 usage() {
     cat <<EOF
 Usage: $SCRIPT_NAME <command>
@@ -61,6 +76,7 @@ Commands:
 
 Environment:
   DOCKER_DATA_ROOT       Default: /var/lib/docker
+  DOCKER_ROUTE_STATE     Previous main default route cache. Default: /tmp/nethunter-docker-main-default.before
   DOCKER_STORAGE_DRIVER  auto, overlayfs, native, overlay2, fuse-overlayfs, or vfs. Default: auto
   DOCKER_BRIDGE_CIDR     Docker bridge address. Default: 172.17.0.1/16
   DOCKER_NAT_CIDR        CIDR to masquerade manually. Default: 172.16.0.0/12
@@ -74,7 +90,13 @@ Environment:
                          Re-exec inside a private mount namespace. Default: 1
   DOCKER_FIX_MOUNT_PROPAGATION
                          Make / and Docker data root rslave before dockerd. Default: 1
+  DOCKER_BIND_ANDROID_BPF
+                         Bind Android bpffs pins into the chroot for iptables. Default: 1
+  DOCKER_USE_ANDROID_IPTABLES
+                         auto, 1, or 0. Prefer Android iptables when available. Default: auto
+  DOCKER_CLEAN_IPTABLES  Remove stale Docker-owned iptables chains before start. Default: 1
   DOCKER_RUNC_WRAPPER    Patch OCI rootfsPropagation before runc create. Default: 1
+  DOCKER_RUNC_PRELOAD    Build/use runtime shim for blocked PR_SET_KEEPCAPS. Default: 1
   RUNC_WRAPPER_LOG       Default: /tmp/nethunter-runc-wrapper.log
   CONTAINERD_ROOT        Default: /var/lib/nethunter-containerd
   CONTAINERD_STATE       Default: /run/nethunter-containerd
@@ -104,7 +126,7 @@ maybe_reexec_mount_namespace() {
     [ "${NH_DOCKER_MOUNT_NS:-0}" = "1" ] && return 0
 
     case "$cmd" in
-        start|test|cleanup|purge|all|status)
+        setup|start|test|cleanup|purge|all|status)
             ;;
         *)
             return 0
@@ -130,6 +152,10 @@ prepare_mount_propagation() {
     log "preparing Docker mount propagation"
 
     if ! mount --make-rslave / 2>/dev/null; then
+        if [ "${NH_DOCKER_MOUNT_NS:-0}" != "1" ]; then
+            log "not in a private mount namespace; skipping chroot root bind for mount propagation"
+            return 0
+        fi
         log "making chroot root a bind mount for propagation setup"
         mount --bind / / 2>/dev/null || {
             log "failed to bind-mount /; Docker layer unpack may fail"
@@ -144,6 +170,98 @@ prepare_mount_propagation() {
     mkdir -p "$DOCKER_DATA_ROOT"
     mount --bind "$DOCKER_DATA_ROOT" "$DOCKER_DATA_ROOT" 2>/dev/null || true
     mount --make-rslave "$DOCKER_DATA_ROOT" 2>/dev/null || true
+}
+
+prepare_android_bpf_mount() {
+    local src="/proc/1/root/sys/fs/bpf"
+    local probe="netd_shared/prog_netd_skfilter_allowlist_xtbpf"
+    local tries=0
+
+    [ "$DOCKER_BIND_ANDROID_BPF" = "1" ] || return 0
+    [ -d "$src" ] || return 0
+
+    mkdir -p /sys/fs/bpf
+
+    if [ -e "/sys/fs/bpf/$probe" ]; then
+        return 0
+    fi
+
+    [ -e "$src/$probe" ] || return 0
+
+    while [ "$tries" -lt 3 ]; do
+        mount --bind "$src" /sys/fs/bpf 2>/dev/null || true
+        if [ -e "/sys/fs/bpf/$probe" ]; then
+            log "bound Android bpffs into chroot for iptables BPF matches"
+            return 0
+        fi
+        umount -l /sys/fs/bpf 2>/dev/null || true
+        tries=$((tries + 1))
+    done
+
+    log "Android bpffs bind did not expose BPF pins; Docker bridge iptables may fail"
+}
+
+bind_android_path() {
+    local src="$1"
+    local dst="$2"
+
+    [ -e "$src" ] || return 1
+    mkdir -p "$dst"
+    mountpoint -q "$dst" 2>/dev/null && return 0
+    mount --bind "$src" "$dst" 2>/dev/null
+}
+
+prepare_android_iptables() {
+    local android_root="/proc/1/root"
+    local cmd
+    local runner=""
+
+    ANDROID_IPTABLES_ACTIVE=0
+    case "$DOCKER_USE_ANDROID_IPTABLES" in
+        0|false|no|off)
+            return 0
+            ;;
+        auto|1|true|yes|on)
+            ;;
+        *)
+            die "unknown DOCKER_USE_ANDROID_IPTABLES=$DOCKER_USE_ANDROID_IPTABLES"
+            ;;
+    esac
+
+    if [ -x "$android_root/system/bin/iptables" ] &&
+            command -v chroot >/dev/null 2>&1 &&
+            chroot "$android_root" /system/bin/iptables --version >/dev/null 2>&1; then
+        runner="chroot $android_root"
+    elif [ -x /system/bin/iptables ] && /system/bin/iptables --version >/dev/null 2>&1; then
+        runner=""
+    fi
+
+    if [ -z "$runner" ] && ! /system/bin/iptables --version >/dev/null 2>&1; then
+        [ "$DOCKER_USE_ANDROID_IPTABLES" = "auto" ] && return 0
+        die "Android iptables requested but /system/bin/iptables is not executable"
+    fi
+
+    mkdir -p "$ANDROID_IPTABLES_WRAPPER_DIR"
+    for cmd in iptables iptables-save iptables-restore ip6tables ip6tables-save ip6tables-restore; do
+        if [ -n "$runner" ] || [ -x "/system/bin/$cmd" ]; then
+            cat > "$ANDROID_IPTABLES_WRAPPER_DIR/$cmd" <<EOF
+#!/usr/bin/env sh
+exec $runner /system/bin/$cmd "\$@"
+EOF
+            chmod 0755 "$ANDROID_IPTABLES_WRAPPER_DIR/$cmd"
+        fi
+    done
+
+    case ":$PATH:" in
+        *":$ANDROID_IPTABLES_WRAPPER_DIR:"*)
+            ;;
+        *)
+            export PATH="$ANDROID_IPTABLES_WRAPPER_DIR:$PATH"
+            ;;
+    esac
+
+    ANDROID_IPTABLES_ACTIVE=1
+    log "using Android iptables from /system/bin"
 }
 
 select_iptables_legacy() {
@@ -161,8 +279,8 @@ iptables_filter_works() {
     local chain="NHTEST_$$_FILTER"
 
     command -v iptables >/dev/null 2>&1 || return 1
-    iptables -t filter -N "$chain" 2>/dev/null || return 1
-    iptables -t filter -X "$chain" 2>/dev/null || true
+    iptables -w 5 -t filter -N "$chain" 2>/dev/null || return 1
+    iptables -w 5 -t filter -X "$chain" 2>/dev/null || true
     return 0
 }
 
@@ -184,13 +302,87 @@ enable_ip_forwarding() {
     [ -w /proc/sys/net/ipv6/conf/all/forwarding ] && echo 1 > /proc/sys/net/ipv6/conf/all/forwarding || true
 }
 
+active_uplink_route() {
+    ip route get 1.1.1.1 2>/dev/null | awk '
+        NR == 1 {
+            for (i = 1; i <= NF; i++) {
+                if ($i == "via") {
+                    via = $(i + 1)
+                } else if ($i == "dev") {
+                    dev = $(i + 1)
+                }
+            }
+            if (dev != "") {
+                if (via != "") {
+                    print "via " via " dev " dev
+                } else {
+                    print "dev " dev
+                }
+            }
+            exit
+        }
+    '
+}
+
+ip_rule_exists() {
+    local needle="$1"
+
+    ip rule show 2>/dev/null | grep -Fq "$needle"
+}
+
+setup_docker_policy_routing() {
+    local route
+
+    command -v ip >/dev/null 2>&1 || return 0
+
+    route="$(active_uplink_route)"
+    if [ -n "$route" ]; then
+        if [ ! -f "$DOCKER_ROUTE_STATE" ]; then
+            ip route show default > "$DOCKER_ROUTE_STATE" 2>/dev/null || true
+        fi
+        # Android normally routes apps through policy tables only. Docker
+        # forwarded packets need a main-table default route.
+        ip route replace default $route 2>/dev/null || true
+        log "main-table Docker default route: default $route"
+    else
+        log "active uplink route not found; Docker bridge internet may fail"
+    fi
+
+    ip_rule_exists "from $DOCKER_NAT_CIDR lookup main" ||
+        ip rule add pref 10500 from "$DOCKER_NAT_CIDR" lookup main 2>/dev/null || true
+    ip_rule_exists "to $DOCKER_NAT_CIDR lookup main" ||
+        ip rule add pref 10501 to "$DOCKER_NAT_CIDR" lookup main 2>/dev/null || true
+}
+
+cleanup_docker_policy_routing() {
+    local line
+
+    command -v ip >/dev/null 2>&1 || return 0
+
+    while ip rule del pref 10500 from "$DOCKER_NAT_CIDR" lookup main 2>/dev/null; do
+        :
+    done
+    while ip rule del pref 10501 to "$DOCKER_NAT_CIDR" lookup main 2>/dev/null; do
+        :
+    done
+
+    [ -f "$DOCKER_ROUTE_STATE" ] || return 0
+
+    ip route del default 2>/dev/null || true
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        ip route add $line 2>/dev/null || true
+    done < "$DOCKER_ROUTE_STATE"
+    rm -f "$DOCKER_ROUTE_STATE"
+}
+
 iptables_add_once() {
     local table="$1"
     local chain="$2"
     shift 2
 
-    iptables -t "$table" -C "$chain" "$@" 2>/dev/null && return 0
-    iptables -t "$table" -A "$chain" "$@" 2>/dev/null || return 1
+    iptables -w 5 -t "$table" -C "$chain" "$@" 2>/dev/null && return 0
+    iptables -w 5 -t "$table" -A "$chain" "$@" 2>/dev/null || return 1
 }
 
 iptables_delete_all() {
@@ -198,9 +390,74 @@ iptables_delete_all() {
     local chain="$2"
     shift 2
 
-    while iptables -t "$table" -D "$chain" "$@" 2>/dev/null; do
+    while iptables -w 5 -t "$table" -D "$chain" "$@" 2>/dev/null; do
         :
     done
+}
+
+iptables_delete_jump_all() {
+    local bin="$1"
+    local table="$2"
+    local chain="$3"
+    local target="$4"
+
+    while "$bin" -w 5 -t "$table" -D "$chain" -j "$target" 2>/dev/null; do
+        :
+    done
+}
+
+cleanup_docker_iptables_for_bin() {
+    local bin="$1"
+    local chain
+    local src
+    local target
+    local chains="
+DOCKER
+DOCKER-BRIDGE
+DOCKER-CT
+DOCKER-FORWARD
+DOCKER-ISOLATION-STAGE-1
+DOCKER-ISOLATION-STAGE-2
+DOCKER-USER
+"
+
+    command -v "$bin" >/dev/null 2>&1 || return 0
+    "$bin" -w 5 -t filter -L >/dev/null 2>&1 || return 0
+
+    for chain in $chains; do
+        "$bin" -w 5 -t filter -F "$chain" 2>/dev/null || true
+    done
+
+    for src in INPUT FORWARD OUTPUT $chains; do
+        for target in $chains; do
+            iptables_delete_jump_all "$bin" filter "$src" "$target"
+        done
+    done
+
+    for chain in $chains; do
+        "$bin" -w 5 -t filter -X "$chain" 2>/dev/null || true
+    done
+
+    "$bin" -w 5 -t nat -L >/dev/null 2>&1 || return 0
+    while "$bin" -w 5 -t nat -D PREROUTING -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null; do
+        :
+    done
+    while "$bin" -w 5 -t nat -D OUTPUT ! -d 127.0.0.0/8 -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null; do
+        :
+    done
+    while "$bin" -w 5 -t nat -D OUTPUT -m addrtype --dst-type LOCAL -j DOCKER 2>/dev/null; do
+        :
+    done
+    "$bin" -w 5 -t nat -F DOCKER 2>/dev/null || true
+    "$bin" -w 5 -t nat -X DOCKER 2>/dev/null || true
+}
+
+cleanup_docker_iptables_state() {
+    [ "$DOCKER_CLEAN_IPTABLES" = "1" ] || return 0
+
+    log "removing stale Docker-owned iptables chains"
+    cleanup_docker_iptables_for_bin iptables
+    cleanup_docker_iptables_for_bin ip6tables
 }
 
 setup_manual_nat() {
@@ -212,6 +469,7 @@ setup_manual_nat() {
     }
 
     enable_ip_forwarding
+    setup_docker_policy_routing
     iface="$(default_route_iface)"
 
     if [ -n "$iface" ]; then
@@ -288,7 +546,8 @@ clear_stale_runtime() {
     rm -f /var/run/docker.sock /run/docker.sock
     rm -rf /var/run/docker /run/docker
     rm -f "$CONTAINERD_SOCK" "$CONTAINERD_SOCK.ttrpc"
-    rm -f "$RUNC_WRAPPER_PATH" "$RUNC_WRAPPER_LOG" "$(dirname "$RUNC_WRAPPER_PATH")/nethunter-runc-preload.so"
+    rm -f "$RUNC_WRAPPER_PATH" "$RUNC_WRAPPER_LOG" "$RUNC_PRELOAD_PATH"
+    rm -rf "$ANDROID_IPTABLES_WRAPPER_DIR"
 }
 
 install_packages() {
@@ -418,6 +677,10 @@ check_kernel_config() {
 setup() {
     require_root
     unset LD_PRELOAD
+    normalize_tmpdir
+    ensure_basic_mounts
+    prepare_android_iptables
+    [ "$ANDROID_IPTABLES_ACTIVE" = "1" ] || prepare_android_bpf_mount
     install_packages
     select_iptables_legacy
     if iptables_filter_works; then
@@ -485,6 +748,71 @@ dockerd_containerd_snapshotter_value() {
     esac
 }
 
+write_runc_preload() {
+    local src
+
+    [ "$DOCKER_RUNC_PRELOAD" = "1" ] || return 0
+
+    command -v gcc >/dev/null 2>&1 || {
+        log "gcc not found; cannot build runc PR_SET_KEEPCAPS preload"
+        return 0
+    }
+
+    src="${RUNC_PRELOAD_PATH}.c"
+    mkdir -p "$(dirname "$RUNC_PRELOAD_PATH")"
+
+    cat > "$src" <<'EOF'
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <sys/prctl.h>
+
+typedef int (*real_prctl_t)(int, unsigned long, unsigned long, unsigned long, unsigned long);
+
+int prctl(int option, ...)
+{
+    static real_prctl_t real_prctl;
+    unsigned long arg2;
+    unsigned long arg3;
+    unsigned long arg4;
+    unsigned long arg5;
+    va_list ap;
+
+    va_start(ap, option);
+    arg2 = va_arg(ap, unsigned long);
+    arg3 = va_arg(ap, unsigned long);
+    arg4 = va_arg(ap, unsigned long);
+    arg5 = va_arg(ap, unsigned long);
+    va_end(ap);
+
+    if (option == PR_SET_KEEPCAPS) {
+        return 0;
+    }
+
+    if (!real_prctl) {
+        real_prctl = (real_prctl_t)dlsym(RTLD_NEXT, "prctl");
+        if (!real_prctl) {
+            errno = ENOSYS;
+            return -1;
+        }
+    }
+
+    return real_prctl(option, arg2, arg3, arg4, arg5);
+}
+EOF
+
+    if gcc -shared -fPIC -O2 -Wall -Wextra -o "$RUNC_PRELOAD_PATH" "$src" -ldl; then
+        rm -f "$src"
+        log "built runc preload shim at $RUNC_PRELOAD_PATH"
+        return 0
+    fi
+
+    rm -f "$src" "$RUNC_PRELOAD_PATH"
+    log "failed to build runc preload shim; runtime may fail on PR_SET_KEEPCAPS"
+    return 0
+}
+
 write_runc_wrapper() {
     [ "$DOCKER_RUNC_WRAPPER" = "1" ] || return 0
     command -v crun >/dev/null 2>&1 || command -v runc >/dev/null 2>&1 || {
@@ -496,7 +824,9 @@ write_runc_wrapper() {
         return 1
     }
 
-    if command -v crun >/dev/null 2>&1; then
+    if [ -n "${NETHUNTER_REAL_RUNC:-}" ]; then
+        log "using $NETHUNTER_REAL_RUNC as OCI runtime"
+    elif command -v crun >/dev/null 2>&1; then
         log "using crun as OCI runtime"
     else
         log "using runc as OCI runtime"
@@ -507,11 +837,16 @@ write_runc_wrapper() {
 set -eu
 
 USING_CRUN=0
-if command -v crun >/dev/null 2>&1; then
-    REAL_RUNC="${NETHUNTER_REAL_RUNC:-$(command -v crun)}"
+if [ -n "${NETHUNTER_REAL_RUNC:-}" ]; then
+    REAL_RUNC="$NETHUNTER_REAL_RUNC"
+    case "${REAL_RUNC##*/}" in
+        crun) USING_CRUN=1 ;;
+    esac
+elif command -v crun >/dev/null 2>&1; then
+    REAL_RUNC="$(command -v crun)"
     USING_CRUN=1
 elif command -v runc >/dev/null 2>&1; then
-    REAL_RUNC="${NETHUNTER_REAL_RUNC:-$(command -v runc)}"
+    REAL_RUNC="$(command -v runc)"
 else
     echo "neither crun nor runc found" >&2
     exit 1
@@ -539,13 +874,14 @@ for arg in "$@"; do
 done
 
 if [ -n "$bundle" ] && [ -f "$bundle/config.json" ] && command -v python3 >/dev/null 2>&1; then
-    python3 - "$bundle/config.json" "$LOG" <<'PY'
+    python3 - "$bundle/config.json" "$LOG" "$USING_CRUN" <<'PY'
 import json
 import os
 import sys
 
 path = sys.argv[1]
 log_path = sys.argv[2]
+remove_mount_ns = len(sys.argv) > 3 and sys.argv[3] == "1"
 
 try:
     with open(path, "r", encoding="utf-8") as f:
@@ -573,7 +909,7 @@ if isinstance(linux, dict):
     old = linux.pop("rootfsPropagation", None) if "rootfsPropagation" in linux else None
     linux["rootfsPropagation"] = ""
     ns_list = linux.get("namespaces")
-    if isinstance(ns_list, list):
+    if remove_mount_ns and isinstance(ns_list, list):
         before = len(ns_list)
         linux["namespaces"] = [ns for ns in ns_list if not (isinstance(ns, dict) and ns.get("type") == "mount")]
         ns_removed = len(linux["namespaces"]) < before
@@ -622,7 +958,15 @@ for arg in "$@"; do
         --cgroup-manager) skip_next=1; continue ;;
     esac
     case "$arg" in
-        create|run|exec)
+        create|run)
+            cmd="$arg"
+            if [ "$USING_CRUN" = "1" ]; then
+                new_args="$new_args --cgroup-manager=disabled"
+            fi
+            new_args="$new_args${new_args:+ }$arg --no-pivot"
+            continue
+            ;;
+        exec)
             cmd="$arg"
             if [ "$USING_CRUN" = "1" ]; then
                 new_args="$new_args --cgroup-manager=disabled"
@@ -632,9 +976,15 @@ for arg in "$@"; do
     new_args="$new_args${new_args:+ }$arg"
 done
 
+PRELOAD="${NETHUNTER_RUNC_PRELOAD:-__RUNC_PRELOAD_PATH__}"
+if [ -f "$PRELOAD" ]; then
+    export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$PRELOAD"
+fi
+
 exec "$REAL_RUNC" $new_args
 EOF
 
+    sed -i "s#__RUNC_PRELOAD_PATH__#$RUNC_PRELOAD_PATH#g" "$RUNC_WRAPPER_PATH" || return 1
     chmod 0755 "$RUNC_WRAPPER_PATH" || return 1
     : > "$RUNC_WRAPPER_LOG"
     log "installed runc wrapper at $RUNC_WRAPPER_PATH"
@@ -808,7 +1158,7 @@ start_dockerd_once() {
         args+=(
             --iptables=false
             --ip-masq=false
-            --ip-forward=false
+            --ip-forward=true
             "--bip=$DOCKER_BRIDGE_CIDR"
         )
     else
@@ -878,10 +1228,13 @@ start_dockerd_with_driver() {
 start_dockerd() {
     require_root
     unset LD_PRELOAD
+    normalize_tmpdir
     ensure_basic_mounts
     mount_cgroups
     mkdir -p "$DOCKER_DATA_ROOT" /var/run /run
     prepare_mount_propagation
+    prepare_android_iptables
+    [ "$ANDROID_IPTABLES_ACTIVE" = "1" ] || prepare_android_bpf_mount
 
     if dockerd_running; then
         if [ "$DOCKER_KILL_EXISTING" = "1" ]; then
@@ -895,7 +1248,12 @@ start_dockerd() {
 
     command -v dockerd >/dev/null 2>&1 || die "dockerd not found; run '$SCRIPT_NAME setup' first"
     clear_stale_runtime
+    prepare_android_iptables
+    [ "$ANDROID_IPTABLES_ACTIVE" = "1" ] || prepare_android_bpf_mount
+    cleanup_docker_iptables_state
+    setup_docker_policy_routing
     start_containerd || die "failed to start external containerd"
+    write_runc_preload
     write_runc_wrapper || die "failed to install runc wrapper"
 
     if [ "$DOCKER_STORAGE_DRIVER" = "auto" ]; then
@@ -943,6 +1301,7 @@ run_docker() {
 docker_test() {
     require_root
     unset LD_PRELOAD
+    normalize_tmpdir
     dockerd_running || die "dockerd is not running; run '$SCRIPT_NAME start' first"
 
     run docker version
@@ -954,7 +1313,7 @@ docker_test() {
     # Bridge networking: container gets an IP and default route, but internet
     # access may be blocked by Android's tetherctrl_FORWARD DROP rule.
     log "bridge network test (internet may fail on Android kernels):"
-    docker run --rm alpine sh -c 'ip addr; ip route; wget -T 10 -qO- http://example.com >/dev/null && echo internet-ok || echo "(internet blocked by kernel)"' 2>&1 || true
+    docker run --rm alpine sh -c 'ip addr; ip route; ping -c 1 -W 5 example.com && echo internet-ok || echo "(internet blocked by kernel)"' 2>&1 || true
 
     # Host networking works around the Android iptables restriction
     log "host network internet test:"
@@ -963,7 +1322,7 @@ docker_test() {
     docker network rm "$TEST_NETWORK" >/dev/null 2>&1 || true
     run_docker docker network create "$TEST_NETWORK"
     log "custom bridge network test (internet may fail on Android kernels):"
-    docker run --rm --network "$TEST_NETWORK" alpine sh -c 'ip addr; ip route; wget -T 10 -qO- http://example.com >/dev/null && echo custom-network-internet-ok || echo "(internet blocked by kernel)"' 2>&1 || true
+    docker run --rm --network "$TEST_NETWORK" alpine sh -c 'ip addr; ip route; ping -c 1 -W 5 example.com && echo custom-network-internet-ok || echo "(internet blocked by kernel)"' 2>&1 || true
     docker network rm "$TEST_NETWORK" >/dev/null 2>&1 || true
 
     log "Docker smoke tests passed"
@@ -972,12 +1331,17 @@ docker_test() {
 cleanup() {
     require_root
     unset LD_PRELOAD
+    normalize_tmpdir
+    ensure_basic_mounts
+    prepare_android_iptables
+    [ "$ANDROID_IPTABLES_ACTIVE" = "1" ] || prepare_android_bpf_mount
     if dockerd_running; then
         docker network rm "$TEST_NETWORK" >/dev/null 2>&1 || true
     fi
     stop_dockerd
     stop_containerd
     cleanup_manual_nat
+    cleanup_docker_policy_routing
     clear_stale_runtime
     log "cleanup done"
 }
@@ -993,6 +1357,10 @@ purge() {
 status() {
     require_root
     unset LD_PRELOAD
+    normalize_tmpdir
+    ensure_basic_mounts
+    prepare_android_iptables
+    [ "$ANDROID_IPTABLES_ACTIVE" = "1" ] || prepare_android_bpf_mount
     uname -a || true
     if [ -r /proc/config.gz ]; then
         zcat /proc/config.gz | grep -E 'CONFIG_(NAMESPACES|USER_NS|PID_NS|NET_NS|CGROUP_DEVICE|CGROUP_PIDS|BLK_CGROUP|VETH|BRIDGE|BRIDGE_NETFILTER|IP_VS|NETFILTER_XT_MATCH_IPVS|IPVLAN|VXLAN|NET_CLS_CGROUP|CGROUP_NET_PRIO|CGROUP_NET_CLASSID|OVERLAY_FS)=' || true
@@ -1006,6 +1374,7 @@ status() {
     fi
     command -v iptables >/dev/null 2>&1 && iptables -t nat -S POSTROUTING 2>/dev/null | grep -E 'MASQUERADE|docker|172\\.' || true
     [ -r /proc/sys/net/ipv4/ip_forward ] && printf 'net.ipv4.ip_forward=%s\n' "$(cat /proc/sys/net/ipv4/ip_forward)" || true
+    command -v ip >/dev/null 2>&1 && ip rule show | grep -E '172\\.16\\.0\\.0/12|lookup main' || true
     command -v ip >/dev/null 2>&1 && ip route || true
     command -v ps >/dev/null 2>&1 && ps -eo pid=,args= 2>/dev/null | grep -E 'dockerd|containerd' | grep -v grep || true
     log_containerd_state
