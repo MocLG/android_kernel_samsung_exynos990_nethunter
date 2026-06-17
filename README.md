@@ -82,6 +82,14 @@ Contributions are welcome! If you find a bug or want to add support for a specif
 ## Credits
 This repository is a downstream fork of the Exynos990 KSU-Next project by Hargriv (H-K-Systems).
 
+Nexmon monitor mode, frame injection concepts, firmware patching framework, and the `NEX_INJECT_FRAME` injection ABI are originally developed by the Nexmon team.
+
+Initial BCM4375B1 18.41.117 firmware patch support was added in 0xIO32's Nexmon fork by 0xIO32 / Markus Probst.
+
+My work in this project is the downstream Samsung Exynos990/NetHunter integration: adapting the BCM4375B1 18.41.117 Nexmon patchset for this device/kernel setup, monitor/channel handling, monpass/tooling fixes, KernelSU firmware overlay packaging, and the Samsung `bcmdhd` driver integration.
+
+Related Nexmon fork: [MocLG/nexmon bcm4375b1_18_41_117_patch](https://github.com/MocLG/nexmon/tree/bcm4375b1_18_41_117_patch).
+
 ---
 
 **Developed with ❤️ for the NetHunter Community.**
