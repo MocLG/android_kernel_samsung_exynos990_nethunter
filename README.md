@@ -80,7 +80,7 @@ Contributions are welcome! If you find a bug or want to add support for a specif
 5. Open a Pull Request.
 
 ## Credits
-This repository is a downstream fork of the Exynos990 KSU-Next project by Hargriv (H-K-Systems).
+This repository is a downstream fork of the Exynos990 KSU-Next project by Hargriv (H-K-Systems): https://gitlab.com/Hargriv/exynos990-note20ultra-ksunext.
 
 Nexmon monitor mode, frame injection concepts, firmware patching framework, and the `NEX_INJECT_FRAME` injection ABI are originally developed by the Nexmon team.
 
