@@ -10,13 +10,23 @@
 #
 # Only one stack can own the UART at a time, so the two modes are exclusive.
 #
+# RUN THIS FROM THE ANDROID SHELL, NOT FROM INSIDE THE KALI CHROOT. It drives
+# Android services (svc, setprop, getprop) that only work in Android's context.
+# The hci0 it creates is global kernel state, so once it is up, BlueZ tools
+# inside the chroot see it immediately over AF_BLUETOOTH - nothing needs to be
+# shared between the two filesystems for Arsenal to work.
+#
+# BlueZ itself (hciattach, hciconfig) normally lives in the chroot, so those are
+# invoked through chroot(8). They are glibc-linked and cannot be executed
+# directly from Android, which has neither their loader nor their libraries.
+#
 #   btmode detect      report what was found, change nothing
 #   btmode nethunter   give the UART to BlueZ, bring up hci0
 #   btmode android     give the UART back to Android's stack
 #   btmode status      report which mode is currently active
 #
-# Overridable via environment: BTMODE_TTY, BTMODE_BAUD, BTMODE_HCIATTACH,
-# BTMODE_HCD, BTMODE_HAL.
+# Overridable via environment: BTMODE_TTY, BTMODE_BAUD, BTMODE_CHROOT,
+# BTMODE_HCIATTACH, BTMODE_HCD, BTMODE_HAL.
 
 BTMODE_TTY="${BTMODE_TTY:-/dev/ttySAC1}"
 BTMODE_BAUD="${BTMODE_BAUD:-3000000}"
@@ -29,6 +39,44 @@ die()  { printf '! %s\n' "$*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die "must run as root"
 
 # --- discovery ---------------------------------------------------------------
+
+# The NetHunter rootfs. BlueZ lives here on a normal install.
+find_chroot() {
+    if [ -n "$BTMODE_CHROOT" ]; then
+        printf '%s\n' "$BTMODE_CHROOT"; return 0
+    fi
+    for c in /data/local/nhsystem/kali-arm64 /data/local/nhsystem/kalifs \
+             /data/local/nhsystem/kali-armhf /data/local/kali-arm64; do
+        [ -x "$c/usr/bin/hciattach" ] && { printf '%s\n' "$c"; return 0; }
+    done
+    return 1
+}
+
+# Decide how BlueZ tools get run. Sets BLUEZ_MODE to "native" or "chroot".
+# Stock Android ships no BlueZ, so chroot is the normal answer.
+resolve_bluez() {
+    BLUEZ_MODE=""; BLUEZ_ROOT=""
+    if [ -n "$BTMODE_HCIATTACH" ] && [ -x "$BTMODE_HCIATTACH" ]; then
+        BLUEZ_MODE=native; HCIATTACH_BIN="$BTMODE_HCIATTACH"; return 0
+    fi
+    for p in /system/bin/hciattach /system/xbin/hciattach /vendor/bin/hciattach; do
+        [ -x "$p" ] && { BLUEZ_MODE=native; HCIATTACH_BIN="$p"; return 0; }
+    done
+    if BLUEZ_ROOT=$(find_chroot); then
+        BLUEZ_MODE=chroot; HCIATTACH_BIN="$BLUEZ_ROOT/usr/bin/hciattach"; return 0
+    fi
+    return 1
+}
+
+# Run a BlueZ tool, entering the chroot when that is where it lives.
+bluez() {
+    tool=$1; shift
+    case "$BLUEZ_MODE" in
+        native) "$(dirname "$HCIATTACH_BIN")/$tool" "$@" ;;
+        chroot) chroot "$BLUEZ_ROOT" "/usr/bin/$tool" "$@" ;;
+        *)      return 127 ;;
+    esac
+}
 
 # The rfkill switch registered by drivers/bluetooth/bcm43xx.c. Toggling it drives
 # the BT_REG_ON GPIO, which is what actually powers the chip.
@@ -57,8 +105,17 @@ find_hal() {
 }
 
 # The patchram blob hciattach downloads to the chip before it will talk H4.
+# When BlueZ runs inside the chroot it resolves firmware against the chroot's
+# own root, so search there first and report paths as BlueZ will see them.
 find_hcd() {
     [ -n "$BTMODE_HCD" ] && { printf '%s\n' "$BTMODE_HCD"; return 0; }
+    if [ "$BLUEZ_MODE" = chroot ]; then
+        for d in /lib/firmware /etc/firmware /lib/firmware/brcm; do
+            for f in "$BLUEZ_ROOT$d"/*.hcd; do
+                [ -f "$f" ] && { printf '%s\n' "${f#"$BLUEZ_ROOT"}"; return 0; }
+            done
+        done
+    fi
     for d in /vendor/firmware /vendor/etc/bluetooth /vendor/etc/firmware \
              /system/vendor/firmware /odm/firmware /lib/firmware /etc/firmware; do
         [ -d "$d" ] || continue
@@ -67,15 +124,6 @@ find_hcd() {
         done
     done
     return 1
-}
-
-find_hciattach() {
-    [ -n "$BTMODE_HCIATTACH" ] && { printf '%s\n' "$BTMODE_HCIATTACH"; return 0; }
-    for p in /system/bin/hciattach /system/xbin/hciattach \
-             /data/local/nhsystem/kali-arm64/usr/bin/hciattach; do
-        [ -x "$p" ] && { printf '%s\n' "$p"; return 0; }
-    done
-    command -v hciattach 2>/dev/null
 }
 
 # Anything still holding the UART will make hciattach fail with EBUSY.
@@ -125,11 +173,21 @@ cmd_detect() {
         log "bluetooth HAL  : NOT FOUND"
     fi
 
-    if ha=$(find_hciattach); then log "hciattach      : $ha"
-    else log "hciattach      : NOT FOUND"; fi
+    if resolve_bluez; then
+        if [ "$BLUEZ_MODE" = chroot ]; then
+            log "bluez          : chroot $BLUEZ_ROOT (run via chroot)"
+        else
+            log "bluez          : native $HCIATTACH_BIN"
+        fi
+    else
+        log "bluez          : NOT FOUND (no hciattach on Android or in a chroot)"
+    fi
 
-    if hcd=$(find_hcd); then log "patchram (.hcd): $hcd"
-    else log "patchram (.hcd): NOT FOUND"; fi
+    if hcd=$(find_hcd); then
+        log "patchram (.hcd): $hcd$([ "$BLUEZ_MODE" = chroot ] && echo ' (chroot-relative)')"
+    else
+        log "patchram (.hcd): NOT FOUND"
+    fi
 
     if hci_present; then log "hci0           : present"
     else log "hci0           : absent"; fi
@@ -146,8 +204,7 @@ cmd_detect() {
 cmd_nethunter() {
     hci_present && { log "hci0 already up; already in nethunter mode"; return 0; }
     [ -c "$BTMODE_TTY" ] || die "$BTMODE_TTY does not exist (override with BTMODE_TTY)"
-
-    ha=$(find_hciattach) || die "hciattach not found (override with BTMODE_HCIATTACH)"
+    resolve_bluez || die "hciattach not found on Android or in a chroot (set BTMODE_HCIATTACH or BTMODE_CHROOT)"
 
     log "- stopping Android Bluetooth"
     svc bluetooth disable 2>/dev/null
@@ -172,8 +229,12 @@ cmd_nethunter() {
         warn "no rfkill found; chip may be unpowered"
     fi
 
-    log "- attaching: $ha -n $BTMODE_TTY bcm43xx $BTMODE_BAUD flow"
-    "$ha" -n "$BTMODE_TTY" bcm43xx "$BTMODE_BAUD" flow &
+    if [ "$BLUEZ_MODE" = chroot ]; then
+        log "- attaching via chroot $BLUEZ_ROOT: hciattach -n $BTMODE_TTY bcm43xx $BTMODE_BAUD flow"
+    else
+        log "- attaching: $HCIATTACH_BIN -n $BTMODE_TTY bcm43xx $BTMODE_BAUD flow"
+    fi
+    bluez hciattach -n "$BTMODE_TTY" bcm43xx "$BTMODE_BAUD" flow &
     printf '%s' $! > "$PIDFILE"
 
     i=0
@@ -185,17 +246,18 @@ cmd_nethunter() {
 
     hci_present || {
         warn "hci0 did not appear - run 'btmode detect' and check dmesg"
-        warn "if patchram failed, point BTMODE_HCD at the right .hcd for BCM4375B1"
+        warn "if patchram failed, put the BCM4375B1 .hcd where BlueZ looks"
+        warn "(inside the chroot that means /lib/firmware) or set BTMODE_HCD"
         return 1
     }
 
-    hciconfig hci0 up 2>/dev/null || warn "hciconfig hci0 up failed"
+    bluez hciconfig hci0 up 2>/dev/null || warn "hciconfig hci0 up failed"
     log "hci0 is up - Bluetooth Arsenal can use the internal chip"
 }
 
 cmd_android() {
     log "- detaching line discipline"
-    hciconfig hci0 down 2>/dev/null
+    bluez hciconfig hci0 down 2>/dev/null
     if [ -f "$PIDFILE" ]; then
         read -r p < "$PIDFILE"
         [ -n "$p" ] && kill "$p" 2>/dev/null
@@ -217,7 +279,7 @@ cmd_android() {
 cmd_status() {
     if hci_present; then
         log "mode: nethunter (hci0 present)"
-        hciconfig hci0 2>/dev/null
+        resolve_bluez && bluez hciconfig hci0 2>/dev/null
     else
         hal=$(find_hal)
         log "mode: android (no hci0)"
@@ -226,9 +288,9 @@ cmd_status() {
 }
 
 case "$1" in
-    detect)    cmd_detect ;;
+    detect)    resolve_bluez; cmd_detect ;;
     nethunter) cmd_nethunter ;;
-    android)   cmd_android ;;
+    android)   resolve_bluez; cmd_android ;;
     status|"") cmd_status ;;
     *) die "usage: btmode {detect|nethunter|android|status}" ;;
 esac
