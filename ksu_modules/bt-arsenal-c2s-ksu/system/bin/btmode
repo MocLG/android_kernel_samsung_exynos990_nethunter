@@ -1,0 +1,234 @@
+#!/system/bin/sh
+#
+# btmode - switch the internal BCM4375B1 between Android and NetHunter Bluetooth
+#
+# The internal Bluetooth chip hangs off Samsung UART1. Android's stack (Fluoride
+# + libbt-vendor) drives it entirely from userspace and never registers a kernel
+# HCI device, which is why hciX does not exist under stock. This script hands the
+# UART over to the kernel's HCI line discipline instead, so BlueZ tools get a
+# real hci0, and hands it back again on the way out.
+#
+# Only one stack can own the UART at a time, so the two modes are exclusive.
+#
+#   btmode detect      report what was found, change nothing
+#   btmode nethunter   give the UART to BlueZ, bring up hci0
+#   btmode android     give the UART back to Android's stack
+#   btmode status      report which mode is currently active
+#
+# Overridable via environment: BTMODE_TTY, BTMODE_BAUD, BTMODE_HCIATTACH,
+# BTMODE_HCD, BTMODE_HAL.
+
+BTMODE_TTY="${BTMODE_TTY:-/dev/ttySAC1}"
+BTMODE_BAUD="${BTMODE_BAUD:-3000000}"
+PIDFILE=/data/local/tmp/btmode-hciattach.pid
+
+log()  { printf '%s\n' "$*"; }
+warn() { printf '! %s\n' "$*" >&2; }
+die()  { printf '! %s\n' "$*" >&2; exit 1; }
+
+[ "$(id -u)" = 0 ] || die "must run as root"
+
+# --- discovery ---------------------------------------------------------------
+
+# The rfkill switch registered by drivers/bluetooth/bcm43xx.c. Toggling it drives
+# the BT_REG_ON GPIO, which is what actually powers the chip.
+find_rfkill() {
+    for r in /sys/class/rfkill/rfkill*; do
+        [ -e "$r/name" ] || continue
+        read -r n < "$r/name" 2>/dev/null || continue
+        case "$n" in
+            *bcm43xx*|*bluetooth*|*Bluetooth*) printf '%s\n' "$r"; return 0 ;;
+        esac
+    done
+    for r in /sys/class/rfkill/rfkill*; do
+        [ -e "$r/type" ] || continue
+        read -r t < "$r/type" 2>/dev/null || continue
+        [ "$t" = bluetooth ] && { printf '%s\n' "$r"; return 0; }
+    done
+    return 1
+}
+
+# Samsung's BT HAL, so we can stop it and make it let go of the UART. The exact
+# service name varies across vendor images, so enumerate init's own view.
+find_hal() {
+    [ -n "$BTMODE_HAL" ] && { printf '%s\n' "$BTMODE_HAL"; return 0; }
+    getprop 2>/dev/null | sed -n 's/^\[init\.svc\.\([^]]*\)\].*/\1/p' \
+        | grep -i bluetooth | head -n 1
+}
+
+# The patchram blob hciattach downloads to the chip before it will talk H4.
+find_hcd() {
+    [ -n "$BTMODE_HCD" ] && { printf '%s\n' "$BTMODE_HCD"; return 0; }
+    for d in /vendor/firmware /vendor/etc/bluetooth /vendor/etc/firmware \
+             /system/vendor/firmware /odm/firmware /lib/firmware /etc/firmware; do
+        [ -d "$d" ] || continue
+        for f in "$d"/*.hcd; do
+            [ -f "$f" ] && { printf '%s\n' "$f"; return 0; }
+        done
+    done
+    return 1
+}
+
+find_hciattach() {
+    [ -n "$BTMODE_HCIATTACH" ] && { printf '%s\n' "$BTMODE_HCIATTACH"; return 0; }
+    for p in /system/bin/hciattach /system/xbin/hciattach \
+             /data/local/nhsystem/kali-arm64/usr/bin/hciattach; do
+        [ -x "$p" ] && { printf '%s\n' "$p"; return 0; }
+    done
+    command -v hciattach 2>/dev/null
+}
+
+# Anything still holding the UART will make hciattach fail with EBUSY.
+tty_holders() {
+    for fd in /proc/[0-9]*/fd/*; do
+        t=$(readlink "$fd" 2>/dev/null) || continue
+        [ "$t" = "$BTMODE_TTY" ] || continue
+        p=${fd#/proc/}; p=${p%%/*}
+        [ -r "/proc/$p/cmdline" ] && printf '%s (%s)\n' "$p" \
+            "$(tr '\0' ' ' < "/proc/$p/cmdline")"
+    done
+}
+
+hci_present() { [ -d /sys/class/bluetooth/hci0 ]; }
+
+# --- power -------------------------------------------------------------------
+
+# rfkill grew a 'soft' attribute (0 = on); older 'state' is inverted (1 = on).
+rfkill_set() {
+    rk=$1; on=$2
+    if [ -w "$rk/soft" ]; then
+        if [ "$on" = 1 ]; then printf 0 > "$rk/soft"; else printf 1 > "$rk/soft"; fi
+    elif [ -w "$rk/state" ]; then
+        printf '%s' "$on" > "$rk/state"
+    else
+        return 1
+    fi
+}
+
+# --- subcommands -------------------------------------------------------------
+
+cmd_detect() {
+    log "tty            : $BTMODE_TTY $([ -c "$BTMODE_TTY" ] && echo '(present)' || echo '(MISSING)')"
+    log "baud           : $BTMODE_BAUD"
+
+    if rk=$(find_rfkill); then
+        rn=""; read -r rn < "$rk/name" 2>/dev/null
+        log "rfkill         : $rk ($rn)"
+    else
+        log "rfkill         : NOT FOUND"
+    fi
+
+    hal=$(find_hal)
+    if [ -n "$hal" ]; then
+        log "bluetooth HAL  : $hal (state: $(getprop "init.svc.$hal"))"
+    else
+        log "bluetooth HAL  : NOT FOUND"
+    fi
+
+    if ha=$(find_hciattach); then log "hciattach      : $ha"
+    else log "hciattach      : NOT FOUND"; fi
+
+    if hcd=$(find_hcd); then log "patchram (.hcd): $hcd"
+    else log "patchram (.hcd): NOT FOUND"; fi
+
+    if hci_present; then log "hci0           : present"
+    else log "hci0           : absent"; fi
+
+    h=$(tty_holders)
+    if [ -n "$h" ]; then
+        log "tty held by    :"
+        printf '%s\n' "$h" | sed 's/^/  /'
+    else
+        log "tty held by    : nobody"
+    fi
+}
+
+cmd_nethunter() {
+    hci_present && { log "hci0 already up; already in nethunter mode"; return 0; }
+    [ -c "$BTMODE_TTY" ] || die "$BTMODE_TTY does not exist (override with BTMODE_TTY)"
+
+    ha=$(find_hciattach) || die "hciattach not found (override with BTMODE_HCIATTACH)"
+
+    log "- stopping Android Bluetooth"
+    svc bluetooth disable 2>/dev/null
+    hal=$(find_hal)
+    [ -n "$hal" ] && { log "- stopping HAL: $hal"; setprop ctl.stop "$hal"; }
+
+    # Give the HAL a moment to close the fd before we grab it.
+    i=0
+    while [ $i -lt 20 ]; do
+        [ -z "$(tty_holders)" ] && break
+        sleep 0.2
+        i=$((i + 1))
+    done
+    h=$(tty_holders)
+    [ -n "$h" ] && warn "UART still held, hciattach may fail: $h"
+
+    if rk=$(find_rfkill); then
+        log "- powering chip via $rk"
+        rfkill_set "$rk" 1 || warn "rfkill write failed"
+        sleep 0.3
+    else
+        warn "no rfkill found; chip may be unpowered"
+    fi
+
+    log "- attaching: $ha -n $BTMODE_TTY bcm43xx $BTMODE_BAUD flow"
+    "$ha" -n "$BTMODE_TTY" bcm43xx "$BTMODE_BAUD" flow &
+    printf '%s' $! > "$PIDFILE"
+
+    i=0
+    while [ $i -lt 50 ]; do
+        hci_present && break
+        sleep 0.2
+        i=$((i + 1))
+    done
+
+    hci_present || {
+        warn "hci0 did not appear - run 'btmode detect' and check dmesg"
+        warn "if patchram failed, point BTMODE_HCD at the right .hcd for BCM4375B1"
+        return 1
+    }
+
+    hciconfig hci0 up 2>/dev/null || warn "hciconfig hci0 up failed"
+    log "hci0 is up - Bluetooth Arsenal can use the internal chip"
+}
+
+cmd_android() {
+    log "- detaching line discipline"
+    hciconfig hci0 down 2>/dev/null
+    if [ -f "$PIDFILE" ]; then
+        read -r p < "$PIDFILE"
+        [ -n "$p" ] && kill "$p" 2>/dev/null
+        rm -f "$PIDFILE"
+    fi
+    pkill -f hciattach 2>/dev/null
+    sleep 0.5
+
+    rk=$(find_rfkill) && rfkill_set "$rk" 0
+
+    log "- restarting Android Bluetooth"
+    hal=$(find_hal)
+    [ -n "$hal" ] && setprop ctl.start "$hal"
+    svc bluetooth enable 2>/dev/null
+
+    log "handed back to Android - toggle Bluetooth in Settings if it does not come up"
+}
+
+cmd_status() {
+    if hci_present; then
+        log "mode: nethunter (hci0 present)"
+        hciconfig hci0 2>/dev/null
+    else
+        hal=$(find_hal)
+        log "mode: android (no hci0)"
+        [ -n "$hal" ] && log "HAL $hal: $(getprop "init.svc.$hal")"
+    fi
+}
+
+case "$1" in
+    detect)    cmd_detect ;;
+    nethunter) cmd_nethunter ;;
+    android)   cmd_android ;;
+    status|"") cmd_status ;;
+    *) die "usage: btmode {detect|nethunter|android|status}" ;;
+esac

@@ -1,0 +1,6 @@
+id=bt-arsenal-c2s
+name=NetHunter Internal Bluetooth Mode Switch
+version=0.1
+versionCode=1
+author=Luka Gejak
+description=Switches the internal BCM4375B1 Bluetooth between Android's userspace stack and the kernel HCI line discipline, so BlueZ tools and Bluetooth Arsenal get a real hci0. Requires a kernel with the restored HCI socket layer.
