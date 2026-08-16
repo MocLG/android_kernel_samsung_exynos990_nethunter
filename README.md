@@ -4,7 +4,7 @@
 ![Android Version](https://img.shields.io/badge/Android13-green.svg)
 ![Platform](https://img.shields.io/badge/Platform-Exynos%20990-orange.svg)
 
-A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifically optimized for **Kali NetHunter**. This kernel enables advanced penetration testing features directly from your mobile device.
+A custom kernel for the Samsung Galaxy Note 20 Ultra (Exynos 990, `c2s`) specifically optimized for **Kali NetHunter**. This kernel enables advanced penetration testing features directly from your mobile device.
 
 ---
 
@@ -24,10 +24,16 @@ A custom kernel for Samsung Exynos 990 devices (Note 20 / S20 Series) specifical
 
 ## 🛠 Supported Devices
 
-This kernel is designed for the **Exynos 990 (universal9830/9832)** platform:
-* Samsung Galaxy Note 20 / Note 20 Ultra (Exynos)
-* Samsung Galaxy S20 / S20+ / S20 Ultra (Exynos)(Samsung S20 series require modifications to dtb/custom dtbo.img)
-* **Tested on Galaxy Note 20 Ultra (N985F), other devices are not officially supported.**
+Built from Samsung's **N986B** source release for the **Exynos 990 (universal9830)** platform.
+
+* **Galaxy Note 20 Ultra (`c2s`, e.g. N985F / N986B) — supported and tested.**
+
+**No other Exynos 990 device is supported by this tree.** Samsung ships device trees per model, and only `c2s` is present here: `arch/arm64/boot/dts/samsung/` contains nothing else, and `build/dtconfigs/` has only `c2s.cfg`.
+
+That includes the **Galaxy Note 20 (`c1s`, SM-N980F)** and the **S20 series** (`x1s` / `y2s` / `z3s`). Do not flash this on them. The installer writes both `boot.img` and `dtbo.img`, and both carry c2s panel, touch controller and sensor descriptions — on another model that means a bootloop or a dead display. It is recoverable with Odin, but it will not boot.
+
+Porting to another model means pulling that model's device trees from opensource.samsung.com, adding a defconfig and a dtbo config for it, and rebuilding. It is not a matter of reflashing this zip.
+
 ---
 
 ## 🏗 Build Instructions
