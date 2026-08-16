@@ -6726,9 +6726,26 @@ CONFIG_CRYPTO_AES_ARM64_CE=y
 CONFIG_CRYPTO_AES_ARM64_CE_BLK=y
 
 # USB Serial Support
+# CH341 and CP210x cover the cheap USB-TTL adapters used for UART consoles
+# on routers and embedded boards, alongside the FTDI and Prolific chips.
 CONFIG_USB_SERIAL=y
 CONFIG_USB_SERIAL_FTDI_SIO=y
 CONFIG_USB_SERIAL_PL2303=y
+CONFIG_USB_SERIAL_CH341=y
+CONFIG_USB_SERIAL_CP210X=y
+
+# --- RTL-SDR ---
+# Software defined radio via RTL28xxU dongles. MEDIA_SUPPORT and
+# MEDIA_DIGITAL_TV_SUPPORT are already enabled above; these three add the
+# USB bridge and SDR path. The tuner and demodulator drivers, including
+# DVB_RTL2832_SDR, are pulled in automatically by MEDIA_SUBDRV_AUTOSELECT.
+CONFIG_MEDIA_SDR_SUPPORT=y
+CONFIG_DVB_USB_V2=y
+CONFIG_DVB_USB_RTL28XXU=y
+
+# --- USB Ethernet gadget (CDC ECM) ---
+# RNDIS above covers Windows hosts; ECM is the equivalent for Linux and macOS.
+CONFIG_USB_CONFIGFS_ECM=y
 
 # --- Bluetooth Core Support ---
 CONFIG_BT=y
