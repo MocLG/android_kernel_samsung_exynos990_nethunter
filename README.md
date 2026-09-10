@@ -12,16 +12,25 @@ A custom kernel for the Samsung Galaxy Note 20 Ultra (Exynos 990, `c2s`) specifi
 ## ⚠️ Project Status: Unmaintained
 
 **This project is no longer actively developed.** The Note 20 Ultra it was built
-and tested on has been retired — its battery failed and replacements are no
-longer available here — so there is no longer a device to test changes on.
+and tested on has been retired. Its battery failed and replacements are no
+longer available here, so there is no longer a device to test changes on.
 
 **V4.4 is the final release, and it is complete and working.** Everything listed
 below was verified on hardware, including internal Bluetooth, which was the last
 feature to land. Nothing is left half-finished.
 
+### Where to get it
+
+The kernel stays available in the **Kali NetHunter repository**, and in this
+repository's **GitHub Releases**. Those two are the preferred way to install it,
+because they come bundled with everything needed to make the features actually
+work, the KernelSU modules and the installer scripts for monitor mode, Bluetooth
+Arsenal, Docker and USB Arsenal. Building from source gives you the kernel on its
+own, and you would have to assemble the rest yourself.
+
 The repository is deliberately **not archived**. Issues and pull requests remain
 open, and forks are welcome. If you have an Exynos 990 Note 20 Ultra and want to
-carry this forward, please do — the tree builds as-is, and the commit messages
+carry this forward, please do. The tree builds as-is, and the commit messages
 document the non-obvious findings in detail, particularly around the BCM4375B1
 Bluetooth and Wi-Fi firmware paths.
 
@@ -45,11 +54,11 @@ Bluetooth and Wi-Fi firmware paths.
 
 Built from Samsung's **N986B** source release for the **Exynos 990 (universal9830)** platform.
 
-* **Galaxy Note 20 Ultra (`c2s`, e.g. N985F / N986B) — supported and tested.**
+* **Galaxy Note 20 Ultra (`c2s`, e.g. N985F / N986B), supported and tested.**
 
 **No other Exynos 990 device is supported by this tree.** Samsung ships device trees per model, and only `c2s` is present here: `arch/arm64/boot/dts/samsung/` contains nothing else, and `build/dtconfigs/` has only `c2s.cfg`.
 
-That includes the **Galaxy Note 20 (`c1s`, SM-N980F)** and the **S20 series** (`x1s` / `y2s` / `z3s`). Do not flash this on them. The installer writes both `boot.img` and `dtbo.img`, and both carry c2s panel, touch controller and sensor descriptions — on another model that means a bootloop or a dead display. It is recoverable with Odin, but it will not boot.
+That includes the **Galaxy Note 20 (`c1s`, SM-N980F)** and the **S20 series** (`x1s` / `y2s` / `z3s`). Do not flash this on them. The installer writes both `boot.img` and `dtbo.img`, and both carry c2s panel, touch controller and sensor descriptions. On another model that means a bootloop or a dead display. It is recoverable with Odin, but it will not boot.
 
 Porting to another model means pulling that model's device trees from opensource.samsung.com, adding a defconfig and a dtbo config for it, and rebuilding. It is not a matter of reflashing this zip.
 
