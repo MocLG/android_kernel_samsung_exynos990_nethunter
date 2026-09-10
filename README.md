@@ -3,15 +3,34 @@
 ![Kernel Version](https://img.shields.io/badge/Kernel-4.19.x-blue.svg)
 ![Android Version](https://img.shields.io/badge/Android13-green.svg)
 ![Platform](https://img.shields.io/badge/Platform-Exynos%20990-orange.svg)
+![Status](https://img.shields.io/badge/Status-Unmaintained-lightgrey.svg)
 
 A custom kernel for the Samsung Galaxy Note 20 Ultra (Exynos 990, `c2s`) specifically optimized for **Kali NetHunter**. This kernel enables advanced penetration testing features directly from your mobile device.
+
+---
+
+## ⚠️ Project Status: Unmaintained
+
+**This project is no longer actively developed.** The Note 20 Ultra it was built
+and tested on has been retired — its battery failed and replacements are no
+longer available here — so there is no longer a device to test changes on.
+
+**V4.4 is the final release, and it is complete and working.** Everything listed
+below was verified on hardware, including internal Bluetooth, which was the last
+feature to land. Nothing is left half-finished.
+
+The repository is deliberately **not archived**. Issues and pull requests remain
+open, and forks are welcome. If you have an Exynos 990 Note 20 Ultra and want to
+carry this forward, please do — the tree builds as-is, and the commit messages
+document the non-obvious findings in detail, particularly around the BCM4375B1
+Bluetooth and Wi-Fi firmware paths.
 
 ---
 
 ## 🚀 Key Features
 
 * **Wireless Injection:** Support for external Wi-Fi adapters (TP-Link, Alfa, etc.).
-* **Bluetooth Arsenal:** Support for bluetooth arsenal/attacks with external adapter.
+* **Bluetooth Arsenal:** Full HCI socket support, using either an external USB adapter or the phone’s own BCM4375B1 via the `btmode` module (kernel-side patchram).
 * **HID Support:** Keyboard/Mouse hijacking (BadUSB/Rubber Ducky attacks). (Not compatible with ADB)
 * **DriveDroid Support:** Use your phone as a bootable USB drive. (Not compatible with ADB)
 * **Network Protocols:** Full support for IEEE 802.11, Bluetooth HCI, and SDR.
